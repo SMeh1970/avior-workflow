@@ -1,4 +1,5 @@
 import { cloneWorkflow, mapEventRow, workflowToRow } from "./schema.mjs";
+import { base64UrlToUtf8, utf8ToBase64Url } from "./base64.mjs";
 
 const META_PREFIX = "AVIOR_META:";
 const TX_PREFIX = "AVIOR_TX:";
@@ -119,7 +120,7 @@ export function buildDashboard(state, timezone, requestedId = "") {
     return left.group - right.group || left.key.localeCompare(right.key) || a.rowNumber - b.rowNumber;
   });
   return {
-    version: "0.1.0",
+    version: "0.2.0",
     generatedAt: displayDateTime(new Date(), timezone),
     timezone,
     openCount: active.length,
@@ -129,11 +130,11 @@ export function buildDashboard(state, timezone, requestedId = "") {
 }
 
 function encode(value) {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+  return utf8ToBase64Url(JSON.stringify(value));
 }
 
 function decode(value) {
-  return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  return JSON.parse(base64UrlToUtf8(value));
 }
 
 function readMeta(note) {

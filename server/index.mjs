@@ -1,13 +1,16 @@
 import http from "node:http";
 import process from "node:process";
 import readline from "node:readline";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { getConfig } from "./config.mjs";
 import { createMcpHandler } from "./mcp.mjs";
 import { createStore } from "./store-factory.mjs";
 
 const config = getConfig();
 const store = await createStore(config);
-const handleMcp = createMcpHandler({ store, config });
+const widgetHtmlText = await readFile(path.join(config.root, "public", "avior-workflow.html"), "utf8");
+const handleMcp = createMcpHandler({ store, config, widgetHtmlText });
 
 async function dispatch(payload) {
   if (Array.isArray(payload)) {

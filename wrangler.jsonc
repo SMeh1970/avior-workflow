@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "avior-workflow",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.html"],
+      "fallthrough": true
+    }
+  ],
+  "vars": {
+    "AVIOR_TIMEZONE": "Europe/Istanbul",
+    "GOOGLE_SPREADSHEET_ID": "13ZY5KPc2Zn6NQzrPDlrB-7jRhqq-JogfOwwVKx0QiJ4",
+    "GOOGLE_WORKFLOW_SHEET_TITLE": "Workflow V2",
+    "GOOGLE_EVENTS_SHEET_TITLE": "События V2",
+    "GOOGLE_WORKFLOW_SHEET_ID": "1358772742",
+    "GOOGLE_EVENTS_SHEET_ID": "388227625"
+  },
+  "secrets": {
+    "required": ["GOOGLE_SERVICE_ACCOUNT_JSON_BASE64"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

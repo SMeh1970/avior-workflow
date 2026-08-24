@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { applyWorkflowAnswer, openWorkflow, undoLastTransaction } from "./engine.mjs";
 
 export const WIDGET_URI = "ui://widget/avior-workflow.html";
@@ -82,10 +80,8 @@ function toolsList() {
   ];
 }
 
-export function createMcpHandler({ store, config }) {
-  let widgetHtmlPromise;
-  const widgetHtml = () =>
-    (widgetHtmlPromise ||= readFile(path.join(config.root, "public", "avior-workflow.html"), "utf8"));
+export function createMcpHandler({ store, config, widgetHtmlText = "<p>АВИОР Workflow</p>" }) {
+  const widgetHtml = () => Promise.resolve(widgetHtmlText);
 
   async function callTool(name, args = {}) {
     if (name === "open_avior_workflow" || name === "refresh_avior_state") {
@@ -117,7 +113,7 @@ export function createMcpHandler({ store, config }) {
         result = {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
-          serverInfo: { name: "avior-workflow", version: "0.1.0" },
+          serverInfo: { name: "avior-workflow", version: "0.2.0" },
           instructions:
             "Операционный контроль АВИОР. Gmail никогда не проверяется автоматически. Для обычных кнопок используйте прямые tools/call."
         };

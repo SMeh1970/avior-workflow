@@ -1,6 +1,6 @@
 {
   "name": "avior-workflow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Private MCP Apps workflow for ООО АВИОР",
@@ -12,6 +12,12 @@
     "start:stdio": "node server/index.mjs --stdio",
     "test": "node --test tests/*.test.mjs",
     "check": "node --check server/index.mjs && node --check server/mcp.mjs && node --check server/engine.mjs && node --check server/google-sheets-store.mjs",
-    "smoke": "node scripts/smoke-test.mjs"
+    "smoke": "node scripts/smoke-test.mjs",
+    "dev:worker": "wrangler dev",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.125.0"
   }
 }

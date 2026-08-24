@@ -2,7 +2,7 @@ services:
   - type: web
     name: avior-workflow
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: ""
     startCommand: node server/index.mjs
     healthCheckPath: /health

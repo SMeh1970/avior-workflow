@@ -1,6 +1,6 @@
 import { applyWorkflowAnswer, openWorkflow, undoLastTransaction } from "./engine.mjs";
 
-export const WIDGET_URI = "ui://widget/avior-workflow-0.2.2.html";
+export const WIDGET_URI = "ui://widget/avior-workflow.html";
 const PROTOCOL_VERSION = "2025-06-18";
 
 function widgetMeta() {

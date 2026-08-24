@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>АВИОР Workflow</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --blue: #2563eb;
+        --blue-soft: #dbeafe;
+        --green: #15803d;
+        --amber: #b45309;
+        --danger: #b91c1c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f172a;
+          --card: #111827;
+          --text: #f8fafc;
+          --muted: #94a3b8;
+          --line: #334155;
+          --blue: #60a5fa;
+          --blue-soft: #172554;
+          --green: #4ade80;
+          --amber: #fbbf24;
+          --danger: #f87171;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 12px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .shell {
+        max-width: 760px;
+        margin: 0 auto;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--card);
+        overflow: hidden;
+        box-shadow: 0 10px 35px rgba(15, 23, 42, .08);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; }
+      .logo {
+        display: grid; place-items: center; width: 32px; height: 32px;
+        border-radius: 10px; color: white; background: #172554; font-weight: 850;
+      }
+      .counter { color: var(--muted); font-size: 12px; }
+      main { padding: 16px; }
+      .meta { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+      .pill {
+        padding: 4px 8px; border-radius: 999px; background: var(--blue-soft);
+        color: var(--blue); font-size: 12px; font-weight: 700;
+      }
+      .pill.future { color: var(--amber); background: transparent; border: 1px solid currentColor; }
+      h1 { margin: 0 0 14px; font-size: 20px; line-height: 1.3; }
+      .state { margin: -4px 0 16px; color: var(--muted); }
+      .options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      button, input {
+        min-height: 42px; border-radius: 11px; border: 1px solid var(--line);
+        font: inherit;
+      }
+      button {
+        padding: 9px 12px; background: var(--card); color: var(--text); cursor: pointer;
+        text-align: left; transition: border-color .12s ease, transform .12s ease;
+      }
+      button:hover { border-color: var(--blue); }
+      button:active { transform: translateY(1px); }
+      button:disabled { opacity: .55; cursor: wait; }
+      .primary { background: var(--blue); color: white; border-color: var(--blue); text-align: center; }
+      .free { display: flex; gap: 8px; margin-top: 10px; }
+      input { flex: 1; min-width: 0; padding: 9px 11px; background: var(--bg); color: var(--text); }
+      .toolbar {
+        display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; margin-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+      .toolbar button { min-height: 36px; padding: 6px 10px; color: var(--muted); font-size: 12px; }
+      .status { min-height: 22px; margin-top: 10px; color: var(--green); font-size: 12px; }
+      .status.error { color: var(--danger); }
+      details { border-top: 1px solid var(--line); }
+      summary { padding: 12px 16px; color: var(--muted); cursor: pointer; }
+      .queue { padding: 0 10px 12px; display: grid; gap: 6px; }
+      .queue button { min-height: 34px; padding: 7px 9px; font-size: 12px; }
+      .queue strong { color: var(--blue); }
+      .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+      .spinner { animation: pulse 1s ease-in-out infinite alternate; }
+      @keyframes pulse { to { opacity: .45; } }
+      @media (max-width: 560px) {
+        body { padding: 0; }
+        .shell { border-radius: 0; border-left: 0; border-right: 0; }
+        .options { grid-template-columns: 1fr; }
+        .free { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="shell" aria-live="polite">
+      <header>
+        <div class="brand"><span class="logo">А</span><span>АВИОР Workflow</span></div>
+        <span id="counter" class="counter">загрузка…</span>
+      </header>
+      <main id="main"><div class="empty spinner">Получаю текущий вопрос…</div></main>
+      <details id="queueWrap" hidden>
+        <summary>Очередь открытых вопросов</summary>
+        <div id="queue" class="queue"></div>
+      </details>
+    </section>
+    <script>
+      (() => {
+        let state = null;
+        let busy = false;
+        let rpcId = 1;
+        let bridgeReady = false;
+        const pending = new Map();
+
+        const main = document.getElementById("main");
+        const counter = document.getElementById("counter");
+        const queueWrap = document.getElementById("queueWrap");
+        const queueEl = document.getElementById("queue");
+
+        function request(method, params) {
+          const id = rpcId++;
+          window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+          return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+        }
+
+        function notify(method, params = {}) {
+          window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+        }
+
+        async function initBridge() {
+          try {
+            await request("ui/initialize", {
+              protocolVersion: "2025-06-18",
+              appInfo: { name: "avior-workflow-ui", version: "0.1.0" },
+              capabilities: {}
+            });
+            bridgeReady = true;
+            notify("ui/notifications/initialized");
+          } catch (_) {
+            bridgeReady = false;
+          }
+        }
+
+        function extract(result) {
+          return result?.structuredContent || result?.result?.structuredContent || result?.result || result;
+        }
+
+        async function callTool(name, args = {}) {
+          if (bridgeReady) return extract(await request("tools/call", { name, arguments: args }));
+          if (window.openai?.callTool) return extract(await window.openai.callTool(name, args));
+          throw new Error("Интерфейс инструментов ChatGPT ещё не готов.");
+        }
+
+        async function sendFollowUp(message) {
+          if (bridgeReady) return request("ui/message", { role: "user", content: [{ type: "text", text: message }] });
+          if (window.openai?.sendFollowUpMessage) return window.openai.sendFollowUpMessage({ prompt: message });
+          throw new Error("Не удалось передать команду ИИ.");
+        }
+
+        function setBusy(value) {
+          busy = value;
+          document.querySelectorAll("button,input").forEach((element) => (element.disabled = value));
+        }
+
+        function node(tag, className, text) {
+          const element = document.createElement(tag);
+          if (className) element.className = className;
+          if (text != null) element.textContent = text;
+          return element;
+        }
+
+        function setStatus(text, error = false) {
+          const target = document.getElementById("status");
+          if (!target) return;
+          target.textContent = text || "";
+          target.classList.toggle("error", error);
+        }
+
+        async function run(action) {
+          if (busy) return;
+          setBusy(true);
+          setStatus("Выполняю…");
+          try {
+            const next = await action();
+            if (next?.requiresAi && next.followUpMessage) await sendFollowUp(next.followUpMessage);
+            if (next) state = next;
+            render();
+            setStatus(next?.message || "Готово");
+          } catch (error) {
+            setStatus(error?.message || "Не удалось выполнить действие", true);
+          } finally {
+            setBusy(false);
+          }
+        }
+
+        async function answer(value, freeText = "") {
+          const current = state?.current;
+          if (!current) return;
+          return run(() =>
+            callTool("apply_avior_answer", {
+              workflow_id: current.workflowId,
+              answer: value,
+              free_text: freeText,
+              expected_event_id: current.lastEvent || ""
+            })
+          );
+        }
+
+        function renderQueue() {
+          queueEl.replaceChildren();
+          const queue = state?.queue || [];
+          queueWrap.hidden = queue.length < 2;
+          queue.forEach((item) => {
+            const button = node("button", "", "");
+            const prefix = node("strong", "", `№${item.invoiceNo || "—"} · `);
+            button.append(prefix, document.createTextNode(item.question));
+            button.onclick = () => run(() => callTool("open_avior_workflow", { workflow_id: item.workflowId }));
+            queueEl.append(button);
+          });
+        }
+
+        function render() {
+          counter.textContent = `${state?.openCount || 0} открыто · ${state?.generatedAt || ""}`;
+          main.replaceChildren();
+          const current = state?.current;
+          if (!current) {
+            main.append(node("div", "empty", "Открытых вопросов нет."));
+            renderQueue();
+            return;
+          }
+
+          const meta = node("div", "meta");
+          meta.append(node("span", "pill", `Счёт №${current.invoiceNo || "—"}`));
+          meta.append(node("span", `pill${current.due ? "" : " future"}`, current.due ? "Требует внимания" : `Контроль ${current.controlDate} ${current.controlTime}`));
+          main.append(meta);
+          main.append(node("h1", "", current.question));
+          main.append(node("p", "state", current.currentState));
+
+          const options = node("div", "options");
+          (current.options || []).forEach((value) => {
+            const button = node("button", "", value);
+            if (/друг|указать|ввести/i.test(value)) {
+              button.onclick = () => document.getElementById("freeText")?.focus();
+            } else {
+              button.onclick = () => answer(value);
+            }
+            options.append(button);
+          });
+          if (current.options?.length) main.append(options);
+
+          const free = node("div", "free");
+          const input = node("input", "");
+          input.id = "freeText";
+          input.placeholder = current.options?.length ? "Другое уточнение" : "Введите ответ";
+          const submit = node("button", "primary", "Зафиксировать");
+          submit.onclick = () => input.value.trim() && answer(input.value.trim(), input.value.trim());
+          input.onkeydown = (event) => {
+            if (event.key === "Enter" && input.value.trim()) submit.click();
+          };
+          free.append(input, submit);
+          main.append(free);
+
+          const toolbar = node("div", "toolbar");
+          const refresh = node("button", "", "Обновить состояние");
+          refresh.onclick = () => run(() => callTool("refresh_avior_state", {}));
+          const undo = node("button", "", "Отменить последнее");
+          undo.onclick = () => run(() => callTool("undo_avior_transaction", {}));
+          const ai = node("button", "", "Позвать ИИ");
+          ai.onclick = () => run(async () => {
+            await sendFollowUp(`Разбери текущий вопрос АВИОР ${current.workflowId}: ${current.question}`);
+            return state;
+          });
+          toolbar.append(refresh, undo, ai);
+          main.append(toolbar, node("div", "status", state.message || ""));
+          main.lastElementChild.id = "status";
+          renderQueue();
+        }
+
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent) return;
+          const message = event.data;
+          if (!message || message.jsonrpc !== "2.0") return;
+          if (message.id != null && pending.has(message.id)) {
+            const waiter = pending.get(message.id);
+            pending.delete(message.id);
+            if (message.error) waiter.reject(new Error(message.error.message));
+            else waiter.resolve(message.result);
+            return;
+          }
+          if (message.method === "ui/notifications/tool-result") {
+            const next = extract(message.params);
+            if (next?.current || next?.openCount === 0) {
+              state = next;
+              render();
+            }
+          }
+        });
+
+        const initial = extract(window.openai?.toolOutput);
+        if (initial?.current || initial?.openCount === 0) {
+          state = initial;
+          render();
+        }
+        initBridge().finally(() => {
+          if (!state) run(() => callTool("open_avior_workflow", {}));
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: avior-workflow
+    runtime: node
+    plan: starter
+    buildCommand: ""
+    startCommand: node server/index.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: AVIOR_STORAGE
+        value: google
+      - key: AVIOR_TIMEZONE
+        value: Europe/Istanbul
+      - key: GOOGLE_SPREADSHEET_ID
+        value: 13ZY5KPc2Zn6NQzrPDlrB-7jRhqq-JogfOwwVKx0QiJ4
+      - key: GOOGLE_WORKFLOW_SHEET_TITLE
+        value: Workflow V2
+      - key: GOOGLE_EVENTS_SHEET_TITLE
+        value: События V2
+      - key: GOOGLE_WORKFLOW_SHEET_ID
+        value: "1358772742"
+      - key: GOOGLE_EVENTS_SHEET_ID
+        value: "388227625"
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON_BASE64
+        sync: false

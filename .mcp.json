@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "avior-workflow": {
+      "command": "node",
+      "args": ["./server/index.mjs", "--stdio"],
+      "env": {
+        "AVIOR_STORAGE": "memory",
+        "AVIOR_TIMEZONE": "Europe/Istanbul"
+      }
+    }
+  }
+}

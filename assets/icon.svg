@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="АВИОР Workflow">
+  <rect width="128" height="128" rx="28" fill="#172554"/>
+  <path d="M26 91 51 35h18l-8 20h25l-14 36H55l7-19H44l-8 19Z" fill="#60a5fa"/>
+  <circle cx="91" cy="37" r="12" fill="#22c55e"/>
+</svg>

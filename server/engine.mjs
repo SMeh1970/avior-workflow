@@ -436,10 +436,20 @@ export async function openWorkflow(store, timezone, requestedId = "", force = fa
 }
 
 export async function applyWorkflowAnswer(store, args, timezone) {
-  const state = await store.readState();
+  // Writes must never be based on the five-minute dashboard cache.
+  // Always re-read the register so the event-id guard compares against the
+  // current Google Sheets row and cannot silently overwrite a newer change.
+  const state = await store.readState(true);
   const before = selectNextWorkflow(state.workflows, timezone, args.workflow_id || "");
   if (!before) {
     return { ...buildDashboard(state, timezone), message: "Открытых вопросов нет." };
+  }
+  if (dueRank(before, timezone).group === 2) {
+    const error = new Error(
+      `Этот контроль назначен на ${before.controlDate} в ${before.controlTime}. Ответ будет доступен после наступления срока.`
+    );
+    error.code = "FUTURE_CONTROL";
+    throw error;
   }
   if (args.expected_event_id && before.lastEvent !== args.expected_event_id) {
     const error = new Error("Состояние изменилось после показа карточки. Нажмите «Обновить». ");

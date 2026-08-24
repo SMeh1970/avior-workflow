@@ -75,6 +75,45 @@ test("same-day time options never include past slots", () => {
   ]);
 });
 
+test("future controls are visible but cannot be answered early", async () => {
+  const store = await fixture();
+  let result = await applyWorkflowAnswer(
+    store,
+    { workflow_id: "WF-DEMO-DELIVERY", answer: "Нет, ждём" },
+    timezone
+  );
+  result = await applyWorkflowAnswer(
+    store,
+    {
+      workflow_id: "WF-DEMO-DELIVERY",
+      answer: "31.12.2099",
+      expected_event_id: result.current.lastEvent
+    },
+    timezone
+  );
+  await applyWorkflowAnswer(
+    store,
+    {
+      workflow_id: "WF-DEMO-DELIVERY",
+      answer: "10:00",
+      expected_event_id: result.current.lastEvent
+    },
+    timezone
+  );
+  const dashboard = await openWorkflow(store, timezone);
+  const future = dashboard.queue.find((item) => item.workflowId === "WF-DEMO-DELIVERY");
+  assert.equal(future.due, false);
+  assert.deepEqual(future.options, []);
+  await assert.rejects(
+    applyWorkflowAnswer(
+      store,
+      { workflow_id: "WF-DEMO-DELIVERY", answer: "Да, получен полностью" },
+      timezone
+    ),
+    (error) => error.code === "FUTURE_CONTROL"
+  );
+});
+
 test("success closes only the selected workflow", async () => {
   const store = await fixture();
   const result = await applyWorkflowAnswer(

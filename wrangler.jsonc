@@ -19,9 +19,6 @@
     "GOOGLE_WORKFLOW_SHEET_ID": "1358772742",
     "GOOGLE_EVENTS_SHEET_ID": "388227625"
   },
-  "secrets": {
-    "required": ["GOOGLE_SERVICE_ACCOUNT_JSON_BASE64"]
-  },
   "observability": {
     "enabled": true
   }

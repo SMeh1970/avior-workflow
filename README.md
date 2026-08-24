@@ -23,7 +23,7 @@ node server/index.mjs
 
 ## Cloudflare Workers
 
-Версия `0.2.0` запускается на Cloudflare Workers Free и не засыпает после простоя.
+Версия `0.2.2` запускается на Cloudflare Workers Free и не засыпает после простоя.
 
 ```bash
 npm install

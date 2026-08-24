@@ -59,7 +59,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok", service: "avior-workflow", version: "0.2.0", storage: "google" });
+      return json({ status: "ok", service: "avior-workflow", version: "0.2.2", storage: "google" });
     }
     if (request.method === "GET" && url.pathname === "/") {
       return json({ service: "avior-workflow", mcp: "/mcp", health: "/health" });

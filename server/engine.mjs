@@ -4,6 +4,7 @@ import { base64UrlToUtf8, utf8ToBase64Url } from "./base64.mjs";
 const META_PREFIX = "AVIOR_META:";
 const TX_PREFIX = "AVIOR_TX:";
 const UNDO_PREFIX = "AVIOR_UNDO:";
+const CONTROL_TIME_SLOTS = ["10:00", "12:00", "15:00", "18:00", "21:00"];
 
 function normalize(value) {
   return String(value || "").trim().toLocaleLowerCase("ru-RU").replace(/\s+/g, " ");
@@ -57,6 +58,52 @@ function nowKey(timezone) {
   return `${p.year}${p.month}${p.day}${p.hour}${p.minute}`;
 }
 
+function minutesFromTime(value) {
+  const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+  if (!match) return Number.NaN;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+export function controlTimeOptions(controlDate, timezone, now = new Date()) {
+  const parts = localParts(now, timezone);
+  if (controlDate !== displayDate(parts)) {
+    return ["10:00", "12:00", "15:00", "Другое время"];
+  }
+
+  const nowMinutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const minimumMinutes = nowMinutes + 15;
+  const candidates = new Set(
+    CONTROL_TIME_SLOTS.filter((value) => minutesFromTime(value) >= minimumMinutes)
+  );
+
+  let generatedMinutes = Math.ceil(minimumMinutes / 30) * 30;
+  while (candidates.size < 3 && generatedMinutes < 24 * 60) {
+    const hours = String(Math.floor(generatedMinutes / 60)).padStart(2, "0");
+    const minutes = String(generatedMinutes % 60).padStart(2, "0");
+    candidates.add(`${hours}:${minutes}`);
+    generatedMinutes += 60;
+  }
+
+  return [
+    ...[...candidates]
+      .sort((left, right) => minutesFromTime(left) - minutesFromTime(right))
+      .slice(0, 3),
+    "Другое время"
+  ];
+}
+
+function ensureFutureControlTime(controlDate, controlTime, timezone, now = new Date()) {
+  const parts = localParts(now, timezone);
+  if (controlDate !== displayDate(parts)) return;
+  const selectedMinutes = minutesFromTime(controlTime);
+  const nowMinutes = Number(parts.hour) * 60 + Number(parts.minute);
+  if (Number.isFinite(selectedMinutes) && selectedMinutes <= nowMinutes) {
+    const error = new Error("Нельзя назначить проверку на уже прошедшее время. Выберите будущее время.");
+    error.code = "PAST_CONTROL_TIME";
+    throw error;
+  }
+}
+
 function isClosed(workflow) {
   const status = normalize(workflow.controlStatus);
   const expected = normalize(workflow.expectedEvent);
@@ -94,6 +141,10 @@ export function selectNextWorkflow(workflows, timezone, requestedId = "") {
 function publicWorkflow(workflow, timezone) {
   if (!workflow) return null;
   const rank = dueRank(workflow, timezone);
+  const meta = readMeta(workflow.note);
+  const waitingForTime =
+    normalize(workflow.controlStatus).includes("ожидается время") ||
+    normalize(workflow.question).startsWith("во сколько");
   return {
     workflowId: workflow.workflowId,
     orderId: workflow.orderId,
@@ -101,8 +152,10 @@ function publicWorkflow(workflow, timezone) {
     positionId: workflow.positionId,
     currentState: workflow.currentState,
     expectedEvent: workflow.expectedEvent,
-    question: workflow.question,
-    options: workflow.options,
+    question: contextualFollowupQuestion(workflow.question, meta.baseQuestion),
+    options: waitingForTime
+      ? controlTimeOptions(workflow.controlDate, timezone)
+      : workflow.options,
     controlDate: workflow.controlDate,
     controlTime: workflow.controlTime,
     controlStatus: workflow.controlStatus,
@@ -120,7 +173,7 @@ export function buildDashboard(state, timezone, requestedId = "") {
     return left.group - right.group || left.key.localeCompare(right.key) || a.rowNumber - b.rowNumber;
   });
   return {
-    version: "0.2.0",
+    version: "0.2.2",
     generatedAt: displayDateTime(new Date(), timezone),
     timezone,
     openCount: active.length,
@@ -150,6 +203,24 @@ function readMeta(note) {
 function writeMeta(note, meta) {
   const clean = String(note || "").replace(/\s*AVIOR_META:[A-Za-z0-9_-]+/g, "").trim();
   return `${clean}${clean ? " " : ""}${META_PREFIX}${encode(meta)}`;
+}
+
+function contextualFollowupQuestion(question, baseQuestion) {
+  const current = String(question || "").trim();
+  const subject = String(baseQuestion || "").trim();
+  if (!subject || subject === current || current.includes(`«${subject}»`)) return current;
+
+  const normalized = normalize(current);
+  if (normalized.startsWith("во сколько")) {
+    return `${current.replace(/\?$/, "")}: «${subject}»`;
+  }
+  if (
+    normalized === "когда проверить снова?" ||
+    normalized === "когда проверить следующий результат?"
+  ) {
+    return `Когда снова проверить: «${subject}»`;
+  }
+  return current;
 }
 
 function classify(answer, freeText = "") {
@@ -290,7 +361,7 @@ function applyTransition(before, classification, answer, timezone) {
   } else if (classification.kind === "pending") {
     after.currentState = `Не выполнено: ${answerText}`;
     after.expectedEvent = "Назначение срока контроля";
-    after.question = "Когда проверить снова?";
+    after.question = contextualFollowupQuestion("Когда проверить снова?", baseMeta.baseQuestion);
     after.options = ["Сегодня", "Завтра", "Срок неизвестен", "Другая дата"];
     after.controlDate = "";
     after.controlTime = "";
@@ -303,17 +374,19 @@ function applyTransition(before, classification, answer, timezone) {
         : today(timezone, classification.offsetDays);
     after.currentState = `${before.currentState}; следующий контроль ${controlDate}`;
     after.expectedEvent = "Назначение времени контроля";
-    after.question =
+    const timeQuestion =
       classification.kind === "date_absolute"
         ? `Во сколько ${controlDate} проверить?`
         : `Во сколько ${classification.offsetDays ? "завтра" : "сегодня"} проверить?`;
-    after.options = ["10:00", "12:00", "15:00", "Другое время"];
+    after.question = contextualFollowupQuestion(timeQuestion, baseMeta.baseQuestion);
+    after.options = controlTimeOptions(controlDate, timezone);
     after.controlDate = controlDate;
     after.controlTime = "";
     after.controlStatus = "Ожидается время контроля";
     after.note = writeMeta(before.note, baseMeta);
     deadline = controlDate;
   } else if (classification.kind === "time") {
+    ensureFutureControlTime(before.controlDate || today(timezone), classification.value, timezone);
     const meta = readMeta(before.note);
     after.currentState = `${before.currentState}; контроль в ${classification.value}`;
     after.expectedEvent = "Контроль результата";
@@ -345,7 +418,10 @@ function applyTransition(before, classification, answer, timezone) {
   } else {
     after.currentState = `${before.currentState}; уточнение: ${answerText}`;
     after.expectedEvent = "Назначение следующего контроля";
-    after.question = "Когда проверить следующий результат?";
+    after.question = contextualFollowupQuestion(
+      "Когда проверить следующий результат?",
+      baseMeta.baseQuestion
+    );
     after.options = ["Сегодня", "Завтра", "Срок неизвестен", "Другая дата"];
     after.controlStatus = "Ожидается срок";
     after.note = writeMeta(before.note, baseMeta);

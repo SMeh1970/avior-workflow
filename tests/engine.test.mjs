@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getConfig, loadSampleState } from "../server/config.mjs";
-import { applyWorkflowAnswer, openWorkflow, undoLastTransaction } from "../server/engine.mjs";
+import {
+  applyWorkflowAnswer,
+  controlTimeOptions,
+  openWorkflow,
+  undoLastTransaction
+} from "../server/engine.mjs";
 import { MemoryStore } from "../server/memory-store.mjs";
 
 const timezone = "Europe/Istanbul";
@@ -27,18 +32,24 @@ test("pending -> date -> time creates a deterministic control chain", async () =
     timezone
   );
   assert.equal(result.current.workflowId, "WF-DEMO-DELIVERY");
-  assert.equal(result.current.question, "Когда проверить снова?");
+  assert.equal(
+    result.current.question,
+    "Когда снова проверить: «Товар уже получен?»"
+  );
 
   result = await applyWorkflowAnswer(
     store,
     {
       workflow_id: "WF-DEMO-DELIVERY",
-      answer: "Сегодня",
+      answer: "Завтра",
       expected_event_id: result.current.lastEvent
     },
     timezone
   );
-  assert.match(result.current.question, /^Во сколько/);
+  assert.equal(
+    result.current.question,
+    "Во сколько завтра проверить: «Товар уже получен?»"
+  );
 
   result = await applyWorkflowAnswer(
     store,
@@ -52,6 +63,16 @@ test("pending -> date -> time creates a deterministic control chain", async () =
   const scheduled = result.queue.find((item) => item.workflowId === "WF-DEMO-DELIVERY");
   assert.equal(scheduled.controlTime, "15:00");
   assert.equal(scheduled.question, "Товар уже получен?");
+});
+
+test("same-day time options never include past slots", () => {
+  const now = new Date("2026-08-24T14:27:00.000Z");
+  assert.deepEqual(controlTimeOptions("24.08.2026", timezone, now), [
+    "18:00",
+    "19:00",
+    "21:00",
+    "Другое время"
+  ]);
 });
 
 test("success closes only the selected workflow", async () => {

@@ -35,4 +35,26 @@ test("widget resource and open tool return MCP Apps payloads", async () => {
   });
   assert.equal(opened.result._meta["ui.resourceUri"], WIDGET_URI);
   assert.equal(opened.result.structuredContent.openCount, 2);
+  assert.equal(opened.result.content[0].text, "Интерактивная карточка АВИОР открыта.");
+  assert.doesNotMatch(opened.result.content[0].text, /Товар уже получен/);
+});
+
+test("stale answer refreshes the widget instead of returning an MCP error", async () => {
+  const handle = await handler();
+  const response = await handle({
+    jsonrpc: "2.0",
+    id: 5,
+    method: "tools/call",
+    params: {
+      name: "apply_avior_answer",
+      arguments: {
+        workflow_id: "WF-DEMO-DELIVERY",
+        answer: "Нет, ждём",
+        expected_event_id: "STALE-EVENT"
+      }
+    }
+  });
+  assert.equal(response.error, undefined);
+  assert.equal(response.result.structuredContent.current.workflowId, "WF-DEMO-DELIVERY");
+  assert.match(response.result.structuredContent.message, /автоматически обновлена/);
 });

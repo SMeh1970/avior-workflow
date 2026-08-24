@@ -1,6 +1,6 @@
 import { applyWorkflowAnswer, openWorkflow, undoLastTransaction } from "./engine.mjs";
 
-export const WIDGET_URI = "ui://widget/avior-workflow.html";
+export const WIDGET_URI = "ui://widget/avior-workflow-0.2.2.html";
 const PROTOCOL_VERSION = "2025-06-18";
 
 function widgetMeta() {
@@ -91,11 +91,30 @@ export function createMcpHandler({ store, config, widgetHtmlText = "<p>АВИО�
         args.workflow_id || "",
         name === "refresh_avior_state"
       );
-      return toolResult(dashboard, dashboard.current ? dashboard.current.question : "Открытых вопросов нет.");
+      return toolResult(
+        dashboard,
+        dashboard.current
+          ? name === "refresh_avior_state"
+            ? "Состояние карточки АВИОР обновлено."
+            : "Интерактивная карточка АВИОР открыта."
+          : "Открытых вопросов нет."
+      );
     }
     if (name === "apply_avior_answer") {
-      const dashboard = await applyWorkflowAnswer(store, args, config.timezone);
-      return toolResult(dashboard);
+      try {
+        const dashboard = await applyWorkflowAnswer(store, args, config.timezone);
+        return toolResult(dashboard);
+      } catch (error) {
+        if (error.code !== "CONFLICT") throw error;
+        const dashboard = await openWorkflow(store, config.timezone, args.workflow_id || "", true);
+        return toolResult(
+          {
+            ...dashboard,
+            message: "Карточка изменилась и автоматически обновлена. Ответ не записан — выберите его ещё раз."
+          },
+          "Устаревшая карточка автоматически обновлена."
+        );
+      }
     }
     if (name === "undo_avior_transaction") {
       return toolResult(await undoLastTransaction(store, config.timezone));
@@ -113,7 +132,7 @@ export function createMcpHandler({ store, config, widgetHtmlText = "<p>АВИО�
         result = {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
-          serverInfo: { name: "avior-workflow", version: "0.2.0" },
+          serverInfo: { name: "avior-workflow", version: "0.2.2" },
           instructions:
             "Операционный контроль АВИОР. Gmail никогда не проверяется автоматически. Для обычных кнопок используйте прямые tools/call."
         };

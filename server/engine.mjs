@@ -153,9 +153,11 @@ function publicWorkflow(workflow, timezone) {
     currentState: workflow.currentState,
     expectedEvent: workflow.expectedEvent,
     question: contextualFollowupQuestion(workflow.question, meta.baseQuestion),
-    options: waitingForTime
-      ? controlTimeOptions(workflow.controlDate, timezone)
-      : workflow.options,
+    options: rank.group === 2
+      ? []
+      : waitingForTime
+        ? controlTimeOptions(workflow.controlDate, timezone)
+        : workflow.options,
     controlDate: workflow.controlDate,
     controlTime: workflow.controlTime,
     controlStatus: workflow.controlStatus,

@@ -255,7 +255,7 @@
           main.append(node("p", "state", current.currentState));
 
           const options = node("div", "options");
-          (current.options || []).forEach((value) => {
+          (current.due ? current.options || [] : []).forEach((value) => {
             const button = node("button", "", value);
             if (/друг|указать|ввести/i.test(value)) {
               button.onclick = () => document.getElementById("freeText")?.focus();
@@ -264,19 +264,22 @@
             }
             options.append(button);
           });
-          if (current.options?.length) main.append(options);
-
-          const free = node("div", "free");
-          const input = node("input", "");
-          input.id = "freeText";
-          input.placeholder = current.options?.length ? "Другое уточнение" : "Введите ответ";
-          const submit = node("button", "primary", "Зафиксировать");
-          submit.onclick = () => input.value.trim() && answer(input.value.trim(), input.value.trim());
-          input.onkeydown = (event) => {
-            if (event.key === "Enter" && input.value.trim()) submit.click();
-          };
-          free.append(input, submit);
-          main.append(free);
+          if (current.due) {
+            if (current.options?.length) main.append(options);
+            const free = node("div", "free");
+            const input = node("input", "");
+            input.id = "freeText";
+            input.placeholder = "Другое уточнение";
+            const submit = node("button", "primary", "Зафиксировать");
+            submit.onclick = () => input.value.trim() && answer(input.value.trim(), input.value.trim());
+            input.onkeydown = (event) => {
+              if (event.key === "Enter" && input.value.trim()) submit.click();
+            };
+            free.append(input, submit);
+            main.append(free);
+          } else {
+            main.append(node("p", "state", `Следующая проверка назначена на ${current.controlDate} в ${current.controlTime}.`));
+          }
 
           const toolbar = node("div", "toolbar");
           const refresh = node("button", "", "Обновить состояние");

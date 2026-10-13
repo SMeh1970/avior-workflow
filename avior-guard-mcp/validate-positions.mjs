@@ -24,7 +24,7 @@ export function validatePositions(referenceRows,proposedRows){
         errors.push({position,field,code:'TEXT_MISMATCH'});
     }
     for(const field of ['quantity','price']){
-      if(!num(a[field])||!num(b[field])||a[field]!==b[field])
+      if(!num(a[field])||!num(b[field])||a[field]!==b[field]||(field==='quantity'&&b[field]<=0)||(field==='price'&&b[field]<0))
         errors.push({position,field,code:'VALUE_MISMATCH'});
     }
     if(num(b.quantity)&&num(b.price)&&num(b.total)){

@@ -10,7 +10,9 @@ const SCOPE='avior:read';
 // Refresh works only for the existing read-only grant. Gmail/send grants remain disabled.
 const ACCESS_TTL=3600;
 const READ_REFRESH_TTL=30*86400;
-const GMAIL_OAUTH_ENABLED=process.env.ENABLE_AVIOR_GMAIL_OAUTH==='true';
+// User-authorized consent-only pilot. Explicit false disables Gmail consent entirely.
+// No Gmail send endpoints are exposed; consent alone cannot send messages.
+const GMAIL_OAUTH_ENABLED=process.env.ENABLE_AVIOR_GMAIL_OAUTH!=='false';
 const requestedScopes=GMAIL_OAUTH_ENABLED?[SCOPE,GUARD_GMAIL_SCOPE]:[SCOPE];
 const now=()=>Math.floor(Date.now()/1000);
 const b64=v=>Buffer.from(typeof v==='string'?v:JSON.stringify(v)).toString('base64url');
@@ -83,7 +85,7 @@ export async function routeOAuth(req){
   const id=seal('client',{uris,exp:now()+365*86400,registrationNonce:signedNonce()});
   return json({client_id:id,client_id_issued_at:now(),redirect_uris:uris,
     client_name:'ChatGPT AVIOR Guard',token_endpoint_auth_method:'none',
-    response_types:['code'],grant_types:['authorization_code']},201);
+    response_types:['code'],grant_types:['authorization_code','refresh_token']},201);
  }
  if(method==='GET'&&p==='/oauth/authorize'){
   const q=u.searchParams,id=q.get('client_id'),registered=client(id);

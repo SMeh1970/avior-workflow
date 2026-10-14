@@ -116,8 +116,9 @@ async function callTool(name, args, request) {
     const status = {connected:true, google_credentials_configured:configured, google_write_scoped_to:'TEST_COPY_5799', source_verified:false, google_read_test:'NOT_CONFIGURED', google_oauth_client_project_number:(String(process.env.GOOGLE_OAUTH_CLIENT_ID||'').match(/^([0-9]{12})-/)||[])[1]||null, live_source_probe:{registry:{accessible:false,reason:'NOT_CHECKED'},order6217:{accessible:false,reason:'NOT_CHECKED'}}, production_writes_enabled:false, gmail_enabled:false};
     if (configured) {
       try {const verified=await verifyReference(); status.source_verified=verified.source_verified; status.google_read_test=verified.source_verified?'PASS':'REFERENCE_MISMATCH';}
-      finally {const results=await Promise.all([probeLiveSource(LIVE_SOURCE_IDS.registry,'Заявки','A1:D15','registry'),probeLiveSource(LIVE_SOURCE_IDS.order6217,'1. Заявка 6217','A1:F15','order')]);status.live_source_probe={registry:results[0],order6217:results[1]};}
       catch (e) {status.google_read_test='ERROR'; status.google_read_error=String(e.message||'Google request failed').slice(0,120);}
+      const results=await Promise.all([probeLiveSource(LIVE_SOURCE_IDS.registry,'Заявки','A1:D15','registry'),probeLiveSource(LIVE_SOURCE_IDS.order6217,'1. Заявка 6217','A1:F15','order')]);
+      status.live_source_probe={registry:results[0],order6217:results[1]};
     }
     return status;
   }

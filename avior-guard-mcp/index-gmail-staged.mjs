@@ -89,7 +89,7 @@ async function callTool(name, args, request) {
   gmail_send_block_reason:'SEND_PIPELINE_AND_IDEMPOTENCY_NOT_VERIFIED',consent_only:true,production_writes_enabled:false};
   if (name === 'avior_guard_status') {
     const configured = Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-    const status = {connected:true, google_credentials_configured:configured, google_write_scoped_to:'TEST_COPY_5799', source_verified:false, google_read_test:'NOT_CONFIGURED', production_writes_enabled:false, gmail_enabled:false};
+    const status = {connected:true, google_credentials_configured:configured, google_write_scoped_to:'TEST_COPY_5799', source_verified:false, google_read_test:'NOT_CONFIGURED', google_oauth_client_project_number:(String(process.env.GOOGLE_OAUTH_CLIENT_ID||'').match(/^([0-9]{12})-/)||[])[1]||null, production_writes_enabled:false, gmail_enabled:false};
     if (configured) {
       try {const verified=await verifyReference(); status.source_verified=verified.source_verified; status.google_read_test=verified.source_verified?'PASS':'REFERENCE_MISMATCH';}
       catch (e) {status.google_read_test='ERROR'; status.google_read_error=String(e.message||'Google request failed').slice(0,120);}

@@ -2,6 +2,7 @@ import { createSign } from 'node:crypto';
 import {routeOAuth,checkAccess,challengeResult,enrichTools,authorizedGmailAccess} from './oauth.mjs';
 import {GUARD_GMAIL_SCOPE} from './gmail-capability.mjs';
 import {loadVerifiedOrder6217,makeGoogleSheetsReader} from './live-order-6217.mjs';
+import {preview6217SelfTest,HISTORICAL_CARD_FIELDS} from './selftest-preview-6217.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
  * The service account can access ONLY a user-shared test copy.
@@ -106,6 +107,16 @@ function checkOperation(cell, value) {
   return {allowed:true};
 }
 async function callTool(name, args, request) {
+  if(name==='avior_selftest_preview_6217'){
+    // Read-only preview, with zero Gmail and zero DB writes. Own mailbox only,
+    // no client-controlled delivery address, order ID or recipient.
+    if(!process.env.GOOGLE_SERVICE_ACCOUNT_JSON)throw Error('GOOGLE_READER_UNAVAILABLE');
+    return preview6217SelfTest({
+      loadOrder:()=>loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken})),
+      provisionalCard:args?.companyCard,
+      ownEmail:process.env.MCP_ALLOWED_GOOGLE_EMAIL
+    });
+  }
   if(name==='avior_gmail_consent_proof'){
     const grant=authorizedGmailAccess(request);
     return grant?{status:'GOOGLE_CONSENT_CONFIRMED',account_verified:true,token_expires_at:grant.expiresAt,gmail_send_enabled:false,emails_sent:0}:{status:'BLOCKED',reason:'GOOGLE_GMAIL_CONSENT_NOT_VERIFIED',gmail_send_enabled:false};
@@ -151,6 +162,9 @@ async function callTool(name, args, request) {
   throw Error('UNKNOWN_TOOL');
 }
 const tools = [
+  {name:'avior_selftest_preview_6217',description:'READ ONLY. Verify full live order #6217 against the master registry and a pinned, provisional 07 Oct company card, preview to the authenticated mailbox owner ONLY. No Gmail sends, no drafts, no PostgreSQL claims, no sheet writes.',inputSchema:{type:'object',properties:{
+    companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false}
+  },required:['companyCard'],additionalProperties:false}},
   {name:'avior_gmail_status',description:'Read-only Gmail consent integration status; NEVER sends mail.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_gmail_consent_proof',description:'Request Google Gmail consent for AVIOR Guard and report whether it was authorized. Does not send, draft, edit, or read user emails.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_guard_status',description:'Diagnostic status for AVIOR Guard; no private data returned.',inputSchema:{type:'object',properties:{},additionalProperties:false}},

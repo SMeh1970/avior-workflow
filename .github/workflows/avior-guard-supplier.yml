@@ -10,6 +10,8 @@ on:
       - 'avior-guard-mcp/acceptance-6217.test.mjs'
       - 'avior-guard-mcp/oauth.mjs'
       - 'avior-guard-mcp/oauth-refresh.test.mjs'
+      - 'avior-guard-mcp/consent-readiness.test.mjs'
+      - 'avior-guard-mcp/index-gmail-staged.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
       - '.github/workflows/avior-guard-supplier.yml'
   pull_request:
@@ -20,6 +22,8 @@ on:
       - 'avior-guard-mcp/acceptance-6217.test.mjs'
       - 'avior-guard-mcp/oauth.mjs'
       - 'avior-guard-mcp/oauth-refresh.test.mjs'
+      - 'avior-guard-mcp/consent-readiness.test.mjs'
+      - 'avior-guard-mcp/index-gmail-staged.mjs'
 jobs:
   unit-and-acceptance:
     runs-on: ubuntu-latest
@@ -33,4 +37,4 @@ jobs:
       - name: Unit and real-6217 snapshot regression tests (mock transport; no Gmail)
         run: node --test avior-guard-mcp/guarded-supplier-request.test.mjs avior-guard-mcp/acceptance-6217.test.mjs
       - name: Read-only OAuth refresh regression (no Google API or Gmail sending)
-        run: node --test avior-guard-mcp/oauth-refresh.test.mjs
+        run: node --test avior-guard-mcp/oauth-refresh.test.mjs avior-guard-mcp/consent-readiness.test.mjs

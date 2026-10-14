@@ -49,5 +49,5 @@ test('No Gmail operation can be invoked: tool listing has only consent proof/sta
  const data=await r.json(), tools=data.result.tools;
  assert.ok(tools.some(x=>x.name==='avior_gmail_consent_proof'));
  assert.ok(!tools.some(x=>/avior_gmail_send|avior_gmail_send_request|gmail_messages_send/.test(x.name)));
- const proof=tools.find(x=>x.name==='avior_gmail_consent_proof');assert.deepEqual(proof.securitySchemes[0].scopes,['avior:gmail-send']);
+ const proof=tools.find(x=>x.name==='avior_gmail_consent_proof');assert.deepEqual(proof.securitySchemes[0].scopes,['avior:read','avior:gmail-send']);
 });

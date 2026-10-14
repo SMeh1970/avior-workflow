@@ -175,7 +175,7 @@ export default {async fetch(req) {
   if(q.method==='tools/call'){
     if(!['avior_guard_status','avior_gmail_status'].includes(q.params?.name)){
       const scope=q.params?.name==='avior_gmail_consent_proof'?GUARD_GMAIL_SCOPE:'avior:read';
-      if(!checkAccess(req,scope))return challengeResult(id,scope);
+      if(!checkAccess(req,scope))return challengeResult(id,scope===GUARD_GMAIL_SCOPE?'avior:read '+GUARD_GMAIL_SCOPE:scope);
     }
     if(!tools.some(t=>t.name===q.params?.name))return err(id,-32601,'Unknown tool');
     try{const result=await callTool(q.params?.name,q.params?.arguments||{},req);return response(id,{content:[{type:'text',text:JSON.stringify(result)}],isError:result.status==='FAILED_READBACK'});}catch(e){return response(id,{content:[{type:'text',text:JSON.stringify({status:'ERROR',reason:String(e.message||'INTERNAL_ERROR'),writes_verified:false})}],isError:true});}

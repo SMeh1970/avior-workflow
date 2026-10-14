@@ -138,6 +138,17 @@ async function callTool(name, args, request) {
         status.live_order_loader={verified:false,reason:String(e.code||'SOURCE_LOAD_FAILED').slice(0,80)};
       }
       status.database_connection_configured=Boolean(process.env.DATABASE_URL);
+      status.dispatch_db={ready:false,reason:'DATABASE_CONNECTION_NOT_CONFIGURED'};
+      if(process.env.DATABASE_URL){
+        try{
+          const {neon}=await import('@neondatabase/serverless');
+          const sql=neon(process.env.DATABASE_URL);
+          const rows=await sql.query("SELECT to_regclass('public.avior_mail_dispatch') IS NOT NULL AS exists");
+          status.dispatch_db=rows?.[0]?.exists===true?{ready:true,table:'avior_mail_dispatch',mode:'READ_ONLY_SELECT'}:{ready:false,reason:'DISPATCH_TABLE_NOT_FOUND'};
+        }catch(e){
+          status.dispatch_db={ready:false,reason:e?.code==='ERR_MODULE_NOT_FOUND'?'NEON_DRIVER_NOT_PACKAGED':'DATABASE_PROBE_FAILED'};
+        }
+      }
     }
     return status;
   }

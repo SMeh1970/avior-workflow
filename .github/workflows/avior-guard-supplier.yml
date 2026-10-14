@@ -10,6 +10,7 @@ on:
       - 'avior-guard-mcp/acceptance-6217.test.mjs'
       - 'avior-guard-mcp/oauth.mjs'
       - 'avior-guard-mcp/oauth-refresh.test.mjs'
+      - 'avior-guard-mcp/oauth-gmail-session-refresh.test.mjs'
       - 'avior-guard-mcp/consent-readiness.test.mjs'
       - 'avior-guard-mcp/oauth-authorization-compat.test.mjs'
       - 'avior-guard-mcp/index-gmail-staged.mjs'
@@ -36,6 +37,7 @@ on:
       - 'avior-guard-mcp/acceptance-6217.test.mjs'
       - 'avior-guard-mcp/oauth.mjs'
       - 'avior-guard-mcp/oauth-refresh.test.mjs'
+      - 'avior-guard-mcp/oauth-gmail-session-refresh.test.mjs'
       - 'avior-guard-mcp/consent-readiness.test.mjs'
       - 'avior-guard-mcp/oauth-authorization-compat.test.mjs'
       - 'avior-guard-mcp/index-gmail-staged.mjs'
@@ -67,7 +69,7 @@ jobs:
       - name: Supplier RFQ regression tests (no Gmail send)
         run: node --test avior-guard-mcp/guarded-supplier-request.test.mjs avior-guard-mcp/acceptance-6217.test.mjs
       - name: OAuth consent and refresh regression tests (no Google API)
-        run: node --test avior-guard-mcp/oauth-refresh.test.mjs avior-guard-mcp/consent-readiness.test.mjs avior-guard-mcp/oauth-authorization-compat.test.mjs
+        run: node --test avior-guard-mcp/oauth-refresh.test.mjs avior-guard-mcp/consent-readiness.test.mjs avior-guard-mcp/oauth-authorization-compat.test.mjs avior-guard-mcp/oauth-gmail-session-refresh.test.mjs
       - name: Live master-registry and full 6217 source verification (mock Sheets)
         run: node --test avior-guard-mcp/live-order-6217.test.mjs
       - name: Signed approval, deduplication and Neon SQL adapter tests (mock only)

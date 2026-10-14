@@ -1,5 +1,6 @@
 import { createSign } from 'node:crypto';
-import {routeOAuth,checkAccess,challengeResult,enrichTools} from './oauth.mjs';
+import {routeOAuth,checkAccess,challengeResult,enrichTools,authorizedGmailAccess} from './oauth.mjs';
+import {GUARD_GMAIL_SCOPE} from './gmail-capability.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
  * The service account can access ONLY a user-shared test copy.
@@ -79,9 +80,13 @@ function checkOperation(cell, value) {
   if (value !== EXPECTED.price) return {allowed:false, reason:'PRICE_MISMATCH_WITH_VERIFIED_REFERENCE'};
   return {allowed:true};
 }
-async function callTool(name, args) {
+async function callTool(name, args, request) {
+  if(name==='avior_gmail_consent_proof'){
+    const grant=authorizedGmailAccess(request);
+    return grant?{status:'GOOGLE_CONSENT_CONFIRMED',account_verified:true,token_expires_at:grant.expiresAt,gmail_send_enabled:false,emails_sent:0}:{status:'BLOCKED',reason:'GOOGLE_GMAIL_CONSENT_NOT_VERIFIED',gmail_send_enabled:false};
+  }
   if (name === 'avior_gmail_status') return {connected:true,google_oauth_for_gmail_enabled:process.env.ENABLE_AVIOR_GMAIL_OAUTH==='true',gmail_send_enabled:false,
-  gmail_send_block_reason:'SEND_PIPELINE_AND_IDEMPOTENCY_NOT_VERIFIED',production_writes_enabled:false};
+  gmail_send_block_reason:'SEND_PIPELINE_AND_IDEMPOTENCY_NOT_VERIFIED',consent_only:true,production_writes_enabled:false};
   if (name === 'avior_guard_status') {
     const configured = Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
     const status = {connected:true, google_credentials_configured:configured, google_write_scoped_to:'TEST_COPY_5799', source_verified:false, google_read_test:'NOT_CONFIGURED', production_writes_enabled:false, gmail_enabled:false};
@@ -113,6 +118,7 @@ async function callTool(name, args) {
 }
 const tools = [
   {name:'avior_gmail_status',description:'Read-only Gmail consent integration status; NEVER sends mail.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+  {name:'avior_gmail_consent_proof',description:'Request Google Gmail consent for AVIOR Guard and report whether it was authorized. Does not send, draft, edit, or read user emails.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_guard_status',description:'Diagnostic status for AVIOR Guard; no private data returned.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_verify_5799',description:'Validate the actual Gigant distance meter row in the exact protected test COPY of purchase request 5799. Returns only boolean match, not private contents.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_try_5799_change',description:'Safely test a proposed price change: rejects any incorrect price, wrong cell, and any production writes. When Google credentials and pilot enable flag are set, writes only fixed unchanged price E3 and diagnostic marker M20 in TEST COPY.',inputSchema:{type:'object',properties:{cell:{type:'string',enum:['E3']},new_value:{type:'number'}},required:['cell','new_value'],additionalProperties:false}}
@@ -128,14 +134,17 @@ export default {async fetch(req) {
   let q; try{q=await req.json();}catch{return output({error:'Bad JSON'},400);}
   if(q?.jsonrpc!=='2.0'||typeof q.method!=='string')return err(q?.id??null,-32600,'Invalid request');
   const id=q.id??null;
-  if(q.method==='initialize')return response(id,{protocolVersion:proto,capabilities:{tools:{}},serverInfo:{name:'AVIOR Guard Pilot',version:'0.4.1-gmail-staged-no-send'}});
+  if(q.method==='initialize')return response(id,{protocolVersion:proto,capabilities:{tools:{}},serverInfo:{name:'AVIOR Guard Pilot',version:'0.4.2-gmail-consent-only-no-send'}});
   if(q.method==='notifications/initialized')return new Response(null,{status:202});
   if(q.method==='ping')return response(id,{});
   if(q.method==='tools/list')return response(id,{tools:enrichTools(tools)});
   if(q.method==='tools/call'){
-    if(!['avior_guard_status','avior_gmail_status'].includes(q.params?.name)&&!checkAccess(req))return challengeResult(id);
+    if(!['avior_guard_status','avior_gmail_status'].includes(q.params?.name)){
+      const scope=q.params?.name==='avior_gmail_consent_proof'?GUARD_GMAIL_SCOPE:'avior:read';
+      if(!checkAccess(req,scope))return challengeResult(id,scope);
+    }
     if(!tools.some(t=>t.name===q.params?.name))return err(id,-32601,'Unknown tool');
-    try{const result=await callTool(q.params?.name,q.params?.arguments||{});return response(id,{content:[{type:'text',text:JSON.stringify(result)}],isError:result.status==='FAILED_READBACK'});}catch(e){return response(id,{content:[{type:'text',text:JSON.stringify({status:'ERROR',reason:String(e.message||'INTERNAL_ERROR'),writes_verified:false})}],isError:true});}
+    try{const result=await callTool(q.params?.name,q.params?.arguments||{},req);return response(id,{content:[{type:'text',text:JSON.stringify(result)}],isError:result.status==='FAILED_READBACK'});}catch(e){return response(id,{content:[{type:'text',text:JSON.stringify({status:'ERROR',reason:String(e.message||'INTERNAL_ERROR'),writes_verified:false})}],isError:true});}
   }
   return err(id,-32601,'Method not found');
 }};

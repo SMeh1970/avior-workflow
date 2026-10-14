@@ -85,7 +85,7 @@ async function callTool(name, args, request) {
     const grant=authorizedGmailAccess(request);
     return grant?{status:'GOOGLE_CONSENT_CONFIRMED',account_verified:true,token_expires_at:grant.expiresAt,gmail_send_enabled:false,emails_sent:0}:{status:'BLOCKED',reason:'GOOGLE_GMAIL_CONSENT_NOT_VERIFIED',gmail_send_enabled:false};
   }
-  if (name === 'avior_gmail_status') return {connected:true,google_oauth_for_gmail_enabled:process.env.ENABLE_AVIOR_GMAIL_OAUTH==='true',gmail_send_enabled:false,
+  if (name === 'avior_gmail_status') return {connected:true,google_oauth_for_gmail_enabled:process.env.ENABLE_AVIOR_GMAIL_OAUTH!=='false',gmail_send_enabled:false,
   gmail_send_block_reason:'SEND_PIPELINE_AND_IDEMPOTENCY_NOT_VERIFIED',consent_only:true,production_writes_enabled:false};
   if (name === 'avior_guard_status') {
     const configured = Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);

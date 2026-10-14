@@ -15,6 +15,30 @@ const JWT_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 const BASE = `https://sheets.googleapis.com/v4/spreadsheets/${ID}`;
 const proto = '2025-03-26';
 const WRITE_ENABLED = false;
+// Fixed, explicitly trusted read-only source probes. Never use caller-provided spreadsheet IDs.
+const LIVE_SOURCE_IDS = Object.freeze({
+  registry:'17Gc-ajR9cN_HmAIT60HavB2tfs4JYNWPtypprC5PG_w',
+  order6217:'18OccLfQaqDZb2JdaHjP1k64HIbKs9GztkYvmi7scSMY'
+});
+async function probeLiveSource(id,tab,range,kind) {
+  try {
+    const bearer=await googleToken();
+    const address='https://sheets.googleapis.com/v4/spreadsheets/'+id+'/values/'+encodeURIComponent("'"+tab+"'!"+range)+'?valueRenderOption=UNFORMATTED_VALUE';
+    const reply=await fetch(address,{method:'GET',headers:{authorization:'Bearer '+bearer,accept:'application/json'}});
+    if(!reply.ok)return {accessible:false,reason:reply.status===403||reply.status===404?'NOT_SHARED_WITH_GUARD':reply.status===401?'GOOGLE_AUTH_EXPIRED':'SHEETS_API_ERROR'};
+    const data=await reply.json();
+    const rows=data.values||[];
+    if(kind==='registry') {
+      const found=rows.slice(1).some(x=>String(x?.[0])==='6217'&&String(x?.[3]||'').includes('6217'));
+      return {accessible:true,structure_verified:found,rowsChecked:rows.length};
+    }
+    const hasHeader=rows[0]?.[0]==='Заявка №6217'&&rows[4]?.[0]==='ID'&&rows[4]?.[1]==='Наименование по заявке';
+    const positions=rows.slice(5,15);
+    const valid=positions.length===10&&new Set(positions.map(x=>String(x[0]))).size===10&&positions.every(x=>/^\d{5}$/.test(String(x[0]))&&typeof x[1]==='string'&&!!x[1].trim()&&typeof x[2]==='number'&&x[2]>0&&typeof x[3]==='string'&&!!x[3].trim());
+    return {accessible:true,structure_verified:hasHeader&&valid,positions_verified:hasHeader&&valid?10:0};
+  }catch {return {accessible:false,reason:'READ_FAILED'};}
+}
+
 let tokenCache = null;
 
 function output(obj, status = 200) { return new Response(JSON.stringify(obj), {status, headers: {'content-type':'application/json; charset=utf-8', 'cache-control':'no-store', 'access-control-allow-origin':'https://chatgpt.com'}}); }
@@ -89,9 +113,10 @@ async function callTool(name, args, request) {
   gmail_send_block_reason:'SEND_PIPELINE_AND_IDEMPOTENCY_NOT_VERIFIED',consent_only:true,production_writes_enabled:false};
   if (name === 'avior_guard_status') {
     const configured = Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-    const status = {connected:true, google_credentials_configured:configured, google_write_scoped_to:'TEST_COPY_5799', source_verified:false, google_read_test:'NOT_CONFIGURED', google_oauth_client_project_number:(String(process.env.GOOGLE_OAUTH_CLIENT_ID||'').match(/^([0-9]{12})-/)||[])[1]||null, production_writes_enabled:false, gmail_enabled:false};
+    const status = {connected:true, google_credentials_configured:configured, google_write_scoped_to:'TEST_COPY_5799', source_verified:false, google_read_test:'NOT_CONFIGURED', google_oauth_client_project_number:(String(process.env.GOOGLE_OAUTH_CLIENT_ID||'').match(/^([0-9]{12})-/)||[])[1]||null, live_source_probe:{registry:{accessible:false,reason:'NOT_CHECKED'},order6217:{accessible:false,reason:'NOT_CHECKED'}}, production_writes_enabled:false, gmail_enabled:false};
     if (configured) {
       try {const verified=await verifyReference(); status.source_verified=verified.source_verified; status.google_read_test=verified.source_verified?'PASS':'REFERENCE_MISMATCH';}
+      finally {const results=await Promise.all([probeLiveSource(LIVE_SOURCE_IDS.registry,'Заявки','A1:D15','registry'),probeLiveSource(LIVE_SOURCE_IDS.order6217,'1. Заявка 6217','A1:F15','order')]);status.live_source_probe={registry:results[0],order6217:results[1]};}
       catch (e) {status.google_read_test='ERROR'; status.google_read_error=String(e.message||'Google request failed').slice(0,120);}
     }
     return status;

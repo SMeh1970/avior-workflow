@@ -10,10 +10,22 @@ const SCOPE='avior:read';
 // Refresh works only for the existing read-only grant. Gmail/send grants remain disabled.
 const ACCESS_TTL=3600;
 const READ_REFRESH_TTL=30*86400;
-// User-authorized consent-only pilot. Explicit false disables Gmail consent entirely.
-// No Gmail send endpoints are exposed; consent alone cannot send messages.
+// User authorized a consent-only pilot. Explicit 'false' disables the Gmail consent scope.
+// This module grants no sending ability; index deliberately exposes consent proof only.
 const GMAIL_OAUTH_ENABLED=process.env.ENABLE_AVIOR_GMAIL_OAUTH!=='false';
 const requestedScopes=GMAIL_OAUTH_ENABLED?[SCOPE,GUARD_GMAIL_SCOPE]:[SCOPE];
+// Multiple requested OAuth scopes are legal (RFC 6749 section 3.3). Reject unknown ones.
+function grantScopes(raw){
+  if(typeof raw!=='string'||!raw.trim())return null;
+  const incoming=raw.trim().split(/\s+/u);
+  if(incoming.length!==new Set(incoming).size || incoming.some(x=>!requestedScopes.includes(x)))return null;
+  return requestedScopes.filter(x=>incoming.includes(x)).join(' ');
+}
+const hasScope=(grant,scope)=>typeof grant==='string'&&grant.split(' ').includes(scope);
+// Resource Indicators are optional in OAuth authorization requests. Normalize only
+// the registered canonical resource and the same origin without its final '/'.
+function validResource(resource){return resource==null||resource===RESOURCE||resource===HOST;}
+
 const now=()=>Math.floor(Date.now()/1000);
 const b64=v=>Buffer.from(typeof v==='string'?v:JSON.stringify(v)).toString('base64url');
 const json=(obj,status=200,extra={})=>new Response(JSON.stringify(obj),{
@@ -46,7 +58,7 @@ export function checkAccess(req,scope=SCOPE){
  const h=req.headers.get('authorization')||'';
  if(!h.startsWith('Bearer '))return false;
  const a=unseal('access',h.slice(7));
- return !!(a&&a.exp>now()&&a.iss===HOST&&a.aud===RESOURCE&&a.scope===scope&&
+ return !!(a&&a.exp>now()&&a.iss===HOST&&a.aud===RESOURCE&&hasScope(a.scope,scope)&&
  a.email===String(process.env.MCP_ALLOWED_GOOGLE_EMAIL||'').trim().toLowerCase()&&a.sub);
 }
 export function authorizedGmailAccess(req){
@@ -90,23 +102,30 @@ export async function routeOAuth(req){
  if(method==='GET'&&p==='/oauth/authorize'){
   const q=u.searchParams,id=q.get('client_id'),registered=client(id);
   const callback=q.get('redirect_uri'),resource=q.get('resource'),challenge=q.get('code_challenge');
-  if(!registered||!registered.uris.includes(callback)||q.get('response_type')!=='code'||
-     q.get('code_challenge_method')!=='S256'||!/^[A-Za-z0-9_-]{43}$/.test(challenge||'')||
-     resource!==RESOURCE||!requestedScopes.includes(q.get('scope'))||!q.get('state')||q.get('state').length>2000)
-    return json({error:'invalid_request'},400);
+  const scoped=grantScopes(q.get('scope'));
+  // Safe diagnostics identify the failed field, never echo secrets, redirect or state.
+  const invalid=(reason)=>json({error:'invalid_request',error_description:reason},400);
+  if(!registered)return invalid('oauth_client_invalid_or_expired');
+  if(!registered.uris.includes(callback))return invalid('redirect_uri_not_registered');
+  if(q.get('response_type')!=='code')return invalid('unsupported_response_type');
+  if(q.get('code_challenge_method')!=='S256'||!/^[A-Za-z0-9_-]{43}$/.test(challenge||''))
+    return invalid('pkce_s256_required');
+  if(!validResource(resource))return invalid('resource_not_recognized');
+  if(!scoped)return invalid('scope_not_supported');
+  if(!q.get('state')||q.get('state').length>2000)return invalid('state_missing_or_invalid');
   if(!process.env.GOOGLE_OAUTH_CLIENT_ID||!process.env.GOOGLE_OAUTH_CLIENT_SECRET||
      !process.env.MCP_ALLOWED_GOOGLE_EMAIL)return json({error:'google_oauth_not_configured'},503);
   const nonce=signedNonce(),googleNonce=signedNonce();
-  const state=seal('state',{id,callback,resource,challenge,outerState:q.get('state'),nonce,googleNonce,requestScope:q.get('scope'),exp:now()+480});
+  const state=seal('state',{id,callback,resource,challenge,outerState:q.get('state'),nonce,googleNonce,requestScope:scoped,exp:now()+480});
   const google=new URL('https://accounts.google.com/o/oauth2/v2/auth');
   google.searchParams.set('client_id',process.env.GOOGLE_OAUTH_CLIENT_ID);
   google.searchParams.set('redirect_uri',HOST+'/oauth/google/callback');
   google.searchParams.set('response_type','code');
-  google.searchParams.set('scope',q.get('scope')===GUARD_GMAIL_SCOPE?googleScopeForGuard(GUARD_GMAIL_SCOPE):'openid email');
+  google.searchParams.set('scope',hasScope(scoped,GUARD_GMAIL_SCOPE)?googleScopeForGuard(GUARD_GMAIL_SCOPE):'openid email');
   google.searchParams.set('access_type','online');
   google.searchParams.set('include_granted_scopes','false');
   google.searchParams.set('nonce',googleNonce);google.searchParams.set('state',state);
-  google.searchParams.set('prompt',q.get('scope')===GUARD_GMAIL_SCOPE?'select_account consent':'select_account');
+  google.searchParams.set('prompt',hasScope(scoped,GUARD_GMAIL_SCOPE)?'select_account consent':'select_account');
   return new Response(null,{status:302,headers:{location:google.toString(),'set-cookie':cookie(nonce),'cache-control':'no-store'}});
  }
  if(method==='GET'&&p==='/oauth/google/callback'){
@@ -134,7 +153,7 @@ export async function routeOAuth(req){
      !['accounts.google.com','https://accounts.google.com'].includes(account.iss)||
      account.nonce!==s.googleNonce||!account.sub)return json({error:'google_account_not_allowed'},403);
   let gmailCapability=null;
-  if(s.requestScope===GUARD_GMAIL_SCOPE){
+  if(hasScope(s.requestScope,GUARD_GMAIL_SCOPE)){
     if(!GMAIL_OAUTH_ENABLED)return json({error:'gmail_oauth_disabled'},403);
     try{confirmGoogleGrant(googleGrant,allowed);gmailCapability=encryptGoogleGrant(googleGrant,
       {email:allowed,sub:account.sub,emailVerified:true},key());}
@@ -155,7 +174,7 @@ export async function routeOAuth(req){
    if(!grant||grant.exp<=now()||grant.iss!==HOST||grant.aud!==RESOURCE||
      grant.scope!==SCOPE||!client(id)||grant.id!==id||
      !grant.sub||!grant.email||grant.email!==String(process.env.MCP_ALLOWED_GOOGLE_EMAIL||'').trim().toLowerCase()||
-     (q.get('resource')&&q.get('resource')!==RESOURCE)||
+     (!validResource(q.get('resource')))||
      (q.get('scope')&&q.get('scope')!==SCOPE))return json({error:'invalid_grant'},400);
    const t=now();
    return json({access_token:seal('access',{iss:HOST,aud:RESOURCE,scope:SCOPE,sub:grant.sub,email:grant.email,iat:t,exp:t+ACCESS_TTL}),
@@ -163,12 +182,12 @@ export async function routeOAuth(req){
      token_type:'Bearer',scope:SCOPE,expires_in:ACCESS_TTL});
   }
   if(q.get('grant_type')!=='authorization_code'||!c||c.exp<=now()||!client(id)||
-     c.id!==id||c.callback!==q.get('redirect_uri')||c.resource!==q.get('resource')||
-     !requestedScopes.includes(c.requestScope)||
+     c.id!==id||c.callback!==q.get('redirect_uri')||!validResource(q.get('resource'))||
+     !grantScopes(c.requestScope)||
      !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)||
      createHash('sha256').update(verifier).digest('base64url')!==c.challenge)
     return json({error:'invalid_grant'},400);
-  const ttl=c.requestScope===GUARD_GMAIL_SCOPE?600:ACCESS_TTL;
+  const ttl=hasScope(c.requestScope,GUARD_GMAIL_SCOPE)?600:ACCESS_TTL;
   const issued=now();
   const refresh=c.requestScope===SCOPE?
     {refresh_token:seal('refresh',{iss:HOST,aud:RESOURCE,id,sub:c.sub,email:c.email,scope:SCOPE,iat:issued,exp:issued+READ_REFRESH_TTL})}:{};

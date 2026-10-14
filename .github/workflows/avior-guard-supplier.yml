@@ -13,6 +13,7 @@ on:
       - 'avior-guard-mcp/consent-readiness.test.mjs'
       - 'avior-guard-mcp/oauth-authorization-compat.test.mjs'
       - 'avior-guard-mcp/index-gmail-staged.mjs'
+      - 'avior-guard-mcp/index.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
       - '.github/workflows/avior-guard-supplier.yml'
   pull_request:
@@ -26,6 +27,7 @@ on:
       - 'avior-guard-mcp/consent-readiness.test.mjs'
       - 'avior-guard-mcp/oauth-authorization-compat.test.mjs'
       - 'avior-guard-mcp/index-gmail-staged.mjs'
+      - 'avior-guard-mcp/index.mjs'
 jobs:
   unit-and-acceptance:
     runs-on: ubuntu-latest

@@ -1,0 +1,29 @@
+name: AVIOR Guard supplier RFQ acceptance
+on:
+  push:
+    branches:
+      - avior-guard-mcp-pilot
+    paths:
+      - 'avior-guard-mcp/guarded-supplier-request.mjs'
+      - 'avior-guard-mcp/guarded-supplier-strict.mjs'
+      - 'avior-guard-mcp/guarded-supplier-request.test.mjs'
+      - 'avior-guard-mcp/acceptance-6217.test.mjs'
+      - '.github/workflows/avior-guard-supplier.yml'
+  pull_request:
+    paths:
+      - 'avior-guard-mcp/guarded-supplier-request.mjs'
+      - 'avior-guard-mcp/guarded-supplier-strict.mjs'
+      - 'avior-guard-mcp/guarded-supplier-request.test.mjs'
+      - 'avior-guard-mcp/acceptance-6217.test.mjs'
+jobs:
+  unit-and-acceptance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Unit and real-6217 snapshot regression tests (mock transport; no Gmail)
+        run: node --test avior-guard-mcp/guarded-supplier-request.test.mjs avior-guard-mcp/acceptance-6217.test.mjs

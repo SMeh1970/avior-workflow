@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { prepareFullSupplierRequest } from './guarded-supplier-strict.mjs';
 import { verifyApprovalReceipt } from './approval-receipt.mjs';
+import { conditionalCardForSelfTest } from './conditional-company-card.mjs';
 
 const deny = code => { const e = new Error(code); e.code = code; throw e; };
 const normalize = value => String(value || '').trim().toLowerCase();
@@ -28,9 +29,15 @@ export async function dispatchOnce({
   if (typeof ownAddress !== 'string' || normalize(intent?.to) !== normalize(ownAddress) ||
       intent?.cc?.length || intent?.bcc?.length) deny('SELF_ADDRESS_ONLY');
 
-  const [order, company, supplier] = await Promise.all([
+  const [order, rawCompany, supplier] = await Promise.all([
     loadOrder(intent.orderId), loadCompany(), loadSupplier(intent.to)
   ]);
+  // User's conditional 14 Oct statement is NOT general supplier authorization.
+  // Only an independently signed self-send approval can reach Gmail afterwards.
+  const company = rawCompany?.status==='PROVISIONAL' ? conditionalCardForSelfTest({
+    historical:rawCompany,mode,recipient:intent.to,ownAddress,
+    acknowledgement:approval?.conditionalCompanyCardAcknowledgement
+  }) : rawCompany;
   // Fresh, complete full order is mandatory. No partial orders in this path.
   const plan = prepareFullSupplierRequest({ intent, order, company, supplier, attachments });
   if (plan.message.to.length !== 1 || normalize(plan.message.to[0]) !== normalize(ownAddress))

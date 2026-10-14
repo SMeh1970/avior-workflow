@@ -18,11 +18,11 @@ on:
       - 'avior-guard-mcp/dispatch-once.mjs'
       - 'avior-guard-mcp/dispatch-once.test.mjs'
       - 'avior-guard-mcp/postgres-dispatch-store.mjs'
+      - 'avior-guard-mcp/neon-dispatch-client.mjs'
+      - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
-      - 'avior-guard-mcp/approval-receipt.mjs'
-      - 'avior-guard-mcp/dispatch-once.mjs'
-      - 'avior-guard-mcp/dispatch-once.test.mjs'
-      - 'avior-guard-mcp/postgres-dispatch-store.mjs'
+      - 'avior-guard-mcp/gmail-transport.mjs'
+      - 'avior-guard-mcp/package.json'
       - '.github/workflows/avior-guard-supplier.yml'
   pull_request:
     paths:
@@ -40,6 +40,12 @@ on:
       - 'avior-guard-mcp/dispatch-once.mjs'
       - 'avior-guard-mcp/dispatch-once.test.mjs'
       - 'avior-guard-mcp/postgres-dispatch-store.mjs'
+      - 'avior-guard-mcp/neon-dispatch-client.mjs'
+      - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
+      - 'avior-guard-mcp/gmail-capability.mjs'
+      - 'avior-guard-mcp/gmail-transport.mjs'
+      - 'avior-guard-mcp/package.json'
+      - '.github/workflows/avior-guard-supplier.yml'
 jobs:
   unit-and-acceptance:
     runs-on: ubuntu-latest
@@ -50,9 +56,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Unit and real-6217 snapshot regression tests (mock transport; no Gmail)
+      - name: Supplier RFQ regression tests (no Gmail send)
         run: node --test avior-guard-mcp/guarded-supplier-request.test.mjs avior-guard-mcp/acceptance-6217.test.mjs
-      - name: Read-only OAuth refresh regression (no Google API or Gmail sending)
+      - name: OAuth consent and refresh regression tests (no Google API)
         run: node --test avior-guard-mcp/oauth-refresh.test.mjs avior-guard-mcp/consent-readiness.test.mjs avior-guard-mcp/oauth-authorization-compat.test.mjs
-      - name: Fail-closed dispatch signed approval and duplicate lock tests (mock Gmail)
-        run: node --test avior-guard-mcp/dispatch-once.test.mjs
+      - name: Signed approval, deduplication and Neon SQL adapter tests (mock only)
+        run: node --test avior-guard-mcp/dispatch-once.test.mjs avior-guard-mcp/neon-dispatch-client.test.mjs
+      - name: Install Neon driver for staging bundle
+        run: npm install --prefix avior-guard-mcp --ignore-scripts --no-audit --no-fund
+      - name: Package staged function (existing Gmail send remains disabled)
+        run: |
+          mkdir -p build/aviorguard
+          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,approval-receipt.mjs,dispatch-once.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,gmail-transport.mjs,package.json} build/aviorguard/
+          cp -r avior-guard-mcp/node_modules build/aviorguard/
+          cd build/aviorguard && zip -qr ../../aviorguard-testonly-bundle.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aviorguard-testonly-bundle
+          path: aviorguard-testonly-bundle.zip

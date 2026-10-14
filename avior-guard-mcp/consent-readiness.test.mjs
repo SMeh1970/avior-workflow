@@ -36,7 +36,7 @@ test('Consent requests exactly Google identity + SEND + READONLY, no MODIFY or D
  assert.equal(google.searchParams.get('access_type'),'online');
 });
 test('Consent proof advertises distinct Gmail scope and never sends',async()=>{
- const r=await postJsonRpc('avior_gmail_consent_proof');assert.equal(r.status,401);assert.match(r.headers.get('www-authenticate'),/avior:gmail-send/);
+ const r=await postJsonRpc('avior_gmail_consent_proof');assert.equal(r.status,401);assert.match(r.headers.get('www-authenticate'),/scope="avior:read avior:gmail-send"/);
  const status=await postJsonRpc('avior_gmail_status');assert.equal(status.status,200);
  const data=await status.json();let info=JSON.parse(data.result.content[0].text);assert.equal(info.gmail_send_enabled,false);assert.equal(info.consent_only,true);
 });

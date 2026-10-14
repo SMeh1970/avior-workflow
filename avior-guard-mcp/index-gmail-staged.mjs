@@ -1,6 +1,7 @@
 import { createSign } from 'node:crypto';
 import {routeOAuth,checkAccess,challengeResult,enrichTools,authorizedGmailAccess} from './oauth.mjs';
 import {GUARD_GMAIL_SCOPE} from './gmail-capability.mjs';
+import {loadVerifiedOrder6217,makeGoogleSheetsReader} from './live-order-6217.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
  * The service account can access ONLY a user-shared test copy.
@@ -119,6 +120,13 @@ async function callTool(name, args, request) {
       catch (e) {status.google_read_test='ERROR'; status.google_read_error=String(e.message||'Google request failed').slice(0,120);}
       const results=await Promise.all([probeLiveSource(LIVE_SOURCE_IDS.registry,'Заявки','A1:D15','registry'),probeLiveSource(LIVE_SOURCE_IDS.order6217,'1. Заявка 6217','A1:F15','order')]);
       status.live_source_probe={registry:results[0],order6217:results[1]};
+      try {
+        const live=await loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken}));
+        status.live_order_loader={verified:true,positions:live.positions.length,fingerprint_prefix:live.sourceFingerprint.slice(0,12)};
+      }catch(e){
+        status.live_order_loader={verified:false,reason:String(e.code||'SOURCE_LOAD_FAILED').slice(0,80)};
+      }
+      status.database_connection_configured=Boolean(process.env.DATABASE_URL);
     }
     return status;
   }

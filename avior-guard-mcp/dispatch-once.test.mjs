@@ -1,0 +1,48 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {dispatchOnce} from './dispatch-once.mjs';
+import {issueApprovalReceipt,verifyApprovalReceipt} from './approval-receipt.mjs';
+import {prepareFullSupplierRequest} from './guarded-supplier-strict.mjs';
+import {postgresDispatchStore} from './postgres-dispatch-store.mjs';
+const email='1043324@gmail.com';
+const secret='not-a-live-secret-just-a-strong-approval-unit-test-key';
+const order={isVerified:true,sourceId:'FROZEN_REPLAY_NOT_LIVE',orderId:'6217',positions:[
+ {number:21212,name:'Вафельное полотно: ширина - 80 см, рулон - 50 метров',quantity:10,unit:'Рулон'},
+ {number:21213,name:'Диск алмазный отрезной Hilberg турбо ультратонкий 125x22.23 Hard Materials X-type',quantity:50,unit:'шт'},
+ {number:21214,name:'Алюминиевое правило 1 ребро жесткости, L-3,0 м.',quantity:20,unit:'шт'},
+ {number:21215,name:'Алюмининевое правило прямоугольное 70*30 L-3.0',quantity:20,unit:'шт'},
+ {number:21216,name:'Плиткорез 300 мм',quantity:2,unit:'шт'},
+ {number:21217,name:'Плиткорез 600 мм',quantity:1,unit:'шт'},
+ {number:21218,name:'Сверло по керамограниту 4 грани 6мм',quantity:100,unit:'шт'},
+ {number:21219,name:'Наборы ключей имбусовых TORX',quantity:2,unit:'шт'},
+ {number:21220,name:'Набор отверток SL+PH WDK-SD1006',quantity:2,unit:'шт'},
+ {number:21221,name:'Монтировка с пластиковой накладкой (500мм)',quantity:5,unit:'шт'}]};
+const company={isVerified:true,verifiedSource:'HISTORICAL_2026_10_07',legalName:'Общество с ограниченной ответственностью «АВИОР»',inn:'5017134957',kpp:'501701001',ogrn:'1235000160713',legalAddress:'143600, Московская область, Волоколамский г.о., г.Волоколамск, ул.Панфилова, д.5, часть 1/2, помещ.24',bankAccount:'40702810502860023762',bankName:'АО «АЛЬФА-БАНК»',bik:'044525593',correspondentAccount:'30101810200000000593'};
+const supplier={isVerified:true,supplierId:'TEST_RECIPIENT_ONLY',authorizedEmails:[email]};
+const intent={orderId:'6217',userMessageId:'UNIT_TEST_NOT_USER_APPROVAL',to:email,positions:structuredClone(order.positions),paymentTerms:'Отсрочка 30 дней при возможности',deliveryTerms:'Уточнить срок и цену доставки',requestedVat:'НДС с указанием ставки',deliveryAddress:'Москва, ЖК «Остров 7.2»',requiredAttachments:[]};
+const fingerprint=()=>prepareFullSupplierRequest({intent,order,company,supplier,attachments:[]}).fingerprint;
+const approval=()=>({confirmed:true,recipient:email,userMessageId:intent.userMessageId,fingerprint:fingerprint(),
+ receipt:issueApprovalReceipt({orderId:'6217',recipient:email,userMessageId:intent.userMessageId,fingerprint:fingerprint(),mode:'SELF_TEST'},secret)});
+function mockStore(){const seen=new Map();return {seen,async claim(x){if(seen.has(x.operationKey))return false;seen.set(x.operationKey,{...x,state:'CLAIMED'});return true},async finish(x){let p=seen.get(x.operationKey);if(!p)throw Error('MISSING_CLAIM');Object.assign(p,x);return true}}}
+function mockTransport(){let sends=0;let message=null;return {async send(m){sends++;message=m;return {messageId:'TEST_FAKE_GMAIL_ID'}},async readSent(id){return {...message,messageId:id}},get sends(){return sends}}}
+const args=(mods={})=>({intent,approval:approval(),loadOrder:async()=>order,loadCompany:async()=>company,loadSupplier:async()=>supplier,attachments:[],store:mockStore(),transport:mockTransport(),ownAddress:email,approvalSecret:secret,enabled:true,...mods});
+test('fail closed when disabled: no DB claim and no Gmail call',async()=>{const p=args({enabled:false});await assert.rejects(dispatchOnce(p),{code:'GMAIL_DISPATCH_DISABLED'});assert.equal(p.transport.sends,0);assert.equal(p.store.seen.size,0)});
+test('self-address only, not supplier address',async()=>{const p=args({ownAddress:'supplier@external.com'});await assert.rejects(dispatchOnce(p),{code:'SELF_ADDRESS_ONLY'});assert.equal(p.transport.sends,0)});
+test('supplier send is not implemented',async()=>{const p=args({mode:'PRODUCTION'});await assert.rejects(dispatchOnce(p),{code:'SUPPLIER_DISPATCH_NOT_IMPLEMENTED'});assert.equal(p.transport.sends,0)});
+test('no approval blocks before persistent claim',async()=>{const p=args({approval:null});await assert.rejects(dispatchOnce(p));assert.equal(p.store.seen.size,0);assert.equal(p.transport.sends,0)});
+test('tampering with exact recipient approval is blocked',async()=>{const p=args({approval:{...approval(),recipient:'attacker@example.com'}});await assert.rejects(dispatchOnce(p),{code:'APPROVAL_REQUIRED_OR_STALE'});assert.equal(p.transport.sends,0)});
+test('all ten source items required (no accidental partial send)',async()=>{const reduced={...intent,positions:intent.positions.slice(1)};const p=args({intent:reduced});await assert.rejects(dispatchOnce(p),{code:'FULL_ORDER_SELECTION_MISMATCH'});assert.equal(p.transport.sends,0)});
+test('stale company record fingerprint blocks sending',async()=>{const p=args({loadCompany:async()=>({...company,bankName:'Other bank'})});await assert.rejects(dispatchOnce(p));assert.equal(p.transport.sends,0)});
+test('wrong supplier directory blocks send',async()=>{const p=args({loadSupplier:async()=>({...supplier,authorizedEmails:['x@example.org']})});await assert.rejects(dispatchOnce(p));assert.equal(p.transport.sends,0)});
+test('correct self test verified via independent readback, exactly once',async()=>{const p=args();const r=await dispatchOnce(p);assert.equal(r.status,'VERIFIED');assert.equal(p.transport.sends,1);assert.equal(p.store.seen.size,1);const next=await dispatchOnce(p);assert.equal(next.status,'BLOCKED_ALREADY_CLAIMED');assert.equal(p.transport.sends,1)});
+test('concurrent duplicate dispatches call send only once',async()=>{const p=args();const rs=await Promise.all([dispatchOnce(p),dispatchOnce(p)]);assert.deepEqual(rs.map(x=>x.status).sort(),['BLOCKED_ALREADY_CLAIMED','VERIFIED']);assert.equal(p.transport.sends,1)});
+test('Gmail response timeout leads UNKNOWN; cannot retry (no duplicate)',async()=>{const p=args({transport:{sends:0,async send(){this.sends++;throw Error('Network timed out')},async readSent(){throw Error('unreachable')}}});const r=await dispatchOnce(p);assert.equal(r.status,'UNKNOWN');assert.equal(r.automaticRetryAllowed,false);const r2=await dispatchOnce(p);assert.equal(r2.status,'BLOCKED_ALREADY_CLAIMED');assert.equal(p.transport.sends,1)});
+test('readback discrepancy blocks VERIFIED yet never resends',async()=>{const p=args();p.transport.readSent=async()=>({messageId:'TEST_FAKE_GMAIL_ID',to:[email],cc:[],bcc:[],subject:'wrong',body:'wrong',attachments:[]});const x=await dispatchOnce(p);assert.equal(x.status,'SENT_BUT_UNVERIFIED');assert.equal(x.automaticRetryAllowed,false);assert.equal((await dispatchOnce(p)).status,'BLOCKED_ALREADY_CLAIMED');assert.equal(p.transport.sends,1)});
+test('database claim failure prevents Gmail entirely',async()=>{const p=args({store:{async claim(){throw Error('DB unavailable')},async finish(){}}});await assert.rejects(dispatchOnce(p));assert.equal(p.transport.sends,0)});
+test('claim returns false prohibits send even with valid approval',async()=>{const p=args({store:{async claim(){return false},async finish(){throw Error('should never happen')}}});const r=await dispatchOnce(p);assert.equal(r.status,'BLOCKED_ALREADY_CLAIMED');assert.equal(p.transport.sends,0)});
+test('finish failure after Gmail acceptance remains a consumed claim and is never resent',async()=>{const seen=new Set();const p=args({store:{async claim(m){if(seen.has(m.operationKey))return false;seen.add(m.operationKey);return true},async finish(){throw Error('DB down after send')}}});const r=await dispatchOnce(p);assert.equal(r.status,'SENT_BUT_UNVERIFIED');assert.equal(r.automaticRetryAllowed,false);assert.equal((await dispatchOnce(p)).status,'BLOCKED_ALREADY_CLAIMED');assert.equal(p.transport.sends,1)});
+test('Postgres adapter uses atomic ON CONFLICT and never string-concatenates user values',async()=>{const calls=[];const db={async query(q,p){calls.push({q,p});return [{operation_key:p[0]}]}};const store=postgresDispatchStore(db);const k='a'.repeat(64);assert.equal(await store.claim({operationKey:k,fingerprint:k,orderId:'6217',recipient:'safe@example.com',sourceId:'TEST'}),true);assert.match(calls[0].q,/ON CONFLICT \(operation_key\) DO NOTHING/);assert.equal(calls[0].p[3],'safe@example.com');assert.equal(await store.finish({operationKey:k,state:'VERIFIED',gmailId:'abc'}),true);assert.match(calls[1].q,/WHERE operation_key=\$1/)});
+
+test('signed receipt rejected if forged even when boolean approval is true',async()=>{const p=args({approval:{...approval(),receipt:approval().receipt.slice(0,-3)+'bad'}});await assert.rejects(dispatchOnce(p),{code:'APPROVAL_RECEIPT_SIGNATURE_INVALID'});assert.equal(p.store.seen.size,0);assert.equal(p.transport.sends,0)});
+test('expired signed receipt rejects late Gmail dispatch',async()=>{const p=args();const old=Date.now()-11*60*1000;p.approval.receipt=issueApprovalReceipt({orderId:'6217',recipient:email,userMessageId:intent.userMessageId,fingerprint:fingerprint(),mode:'SELF_TEST'},secret,old);await assert.rejects(dispatchOnce(p),{code:'APPROVAL_RECEIPT_SCOPE_OR_TTL_INVALID'});assert.equal(p.transport.sends,0)});
+test('changed recipient/order/fingerprint signed receipt cannot be reused',()=>{const ticket=approval().receipt;for(const x of [{orderId:'6218',recipient:email,userMessageId:intent.userMessageId,fingerprint:fingerprint()},{orderId:'6217',recipient:'different@example.com',userMessageId:intent.userMessageId,fingerprint:fingerprint()},{orderId:'6217',recipient:email,userMessageId:intent.userMessageId,fingerprint:'1'.repeat(64)}])assert.throws(()=>verifyApprovalReceipt(ticket,x,secret),{code:'APPROVAL_RECEIPT_SCOPE_OR_TTL_INVALID'});});

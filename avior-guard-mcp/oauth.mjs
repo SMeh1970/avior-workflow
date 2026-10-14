@@ -7,9 +7,10 @@ import {GUARD_GMAIL_SCOPE,googleScopeForGuard,confirmGoogleGrant,encryptGoogleGr
 const HOST='https://br-still-wind-b9pzhljq-aviorguard.compute.c-7.eu-central-1.aws.neon.tech';
 const RESOURCE=HOST+'/';
 const SCOPE='avior:read';
-// Refresh works only for the existing read-only grant. Gmail/send grants remain disabled.
+// MCP session refresh is supported for both ordinary read and consent-only grants.
+// Refresh NEVER renews the short-lived Google Gmail capability or enables sending.
 const ACCESS_TTL=3600;
-const READ_REFRESH_TTL=30*86400;
+const SESSION_REFRESH_TTL=30*86400;
 // User authorized a consent-only pilot. Explicit 'false' disables the Gmail consent scope.
 // This module grants no sending ability; index deliberately exposes consent proof only.
 const GMAIL_OAUTH_ENABLED=process.env.ENABLE_AVIOR_GMAIL_OAUTH!=='false';
@@ -171,15 +172,19 @@ export async function routeOAuth(req){
   const c=unseal('code',q.get('code')),id=q.get('client_id'),verifier=q.get('code_verifier')||'';
   if(q.get('grant_type')==='refresh_token'){
    const grant=unseal('refresh',q.get('refresh_token'));
+   // Refresh maintains the MCP connection only. It must never carry forward a
+   // Google Gmail access token or Gmail capability; those expire separately.
+   const scoped=grantScopes(grant?.scope);
+   const refreshedScope=q.get('scope')?grantScopes(q.get('scope')):scoped;
+   const scopeAllowed=!!(scoped&&refreshedScope&&refreshedScope.split(' ').every(x=>hasScope(scoped,x)));
    if(!grant||grant.exp<=now()||grant.iss!==HOST||grant.aud!==RESOURCE||
-     grant.scope!==SCOPE||!client(id)||grant.id!==id||
+     !scopeAllowed||scoped!==grant.scope||!client(id)||grant.id!==id||
      !grant.sub||!grant.email||grant.email!==String(process.env.MCP_ALLOWED_GOOGLE_EMAIL||'').trim().toLowerCase()||
-     (!validResource(q.get('resource')))||
-     (q.get('scope')&&q.get('scope')!==SCOPE))return json({error:'invalid_grant'},400);
+     (!validResource(q.get('resource'))))return json({error:'invalid_grant'},400);
    const t=now();
-   return json({access_token:seal('access',{iss:HOST,aud:RESOURCE,scope:SCOPE,sub:grant.sub,email:grant.email,iat:t,exp:t+ACCESS_TTL}),
-     refresh_token:seal('refresh',{iss:HOST,aud:RESOURCE,id,sub:grant.sub,email:grant.email,scope:SCOPE,iat:t,exp:grant.exp}),
-     token_type:'Bearer',scope:SCOPE,expires_in:ACCESS_TTL});
+   return json({access_token:seal('access',{iss:HOST,aud:RESOURCE,scope:refreshedScope,sub:grant.sub,email:grant.email,iat:t,exp:t+ACCESS_TTL}),
+     refresh_token:seal('refresh',{iss:HOST,aud:RESOURCE,id,sub:grant.sub,email:grant.email,scope:grant.scope,iat:t,exp:grant.exp}),
+     token_type:'Bearer',scope:refreshedScope,expires_in:ACCESS_TTL});
   }
   if(q.get('grant_type')!=='authorization_code'||!c||c.exp<=now()||!client(id)||
      c.id!==id||c.callback!==q.get('redirect_uri')||!validResource(q.get('resource'))||
@@ -189,8 +194,10 @@ export async function routeOAuth(req){
     return json({error:'invalid_grant'},400);
   const ttl=hasScope(c.requestScope,GUARD_GMAIL_SCOPE)?600:ACCESS_TTL;
   const issued=now();
-  const refresh=c.requestScope===SCOPE?
-    {refresh_token:seal('refresh',{iss:HOST,aud:RESOURCE,id,sub:c.sub,email:c.email,scope:SCOPE,iat:issued,exp:issued+READ_REFRESH_TTL})}:{};
+  // Even a short-lived Gmail-consent MCP token gets a renewable *session*.
+  // Only the initial access token carries the encrypted, short-lived Google grant.
+  const refresh={refresh_token:seal('refresh',{iss:HOST,aud:RESOURCE,id,
+    sub:c.sub,email:c.email,scope:c.requestScope,iat:issued,exp:issued+SESSION_REFRESH_TTL})};
   return json({access_token:seal('access',{iss:HOST,aud:RESOURCE,scope:c.requestScope,
     sub:c.sub,email:c.email,gmailCapability:c.gmailCapability,iat:issued,exp:issued+ttl}),token_type:'Bearer',
     scope:c.requestScope,expires_in:ttl,...refresh});

@@ -15,6 +15,8 @@ on:
       - 'avior-guard-mcp/oauth-authorization-compat.test.mjs'
       - 'avior-guard-mcp/index-gmail-staged.mjs'
       - 'avior-guard-mcp/index.mjs'
+      - 'avior-guard-mcp/selftest-preview-6217.mjs'
+      - 'avior-guard-mcp/selftest-preview-6217.test.mjs'
       - 'avior-guard-mcp/live-order-6217.mjs'
       - 'avior-guard-mcp/live-order-6217.test.mjs'
       - 'avior-guard-mcp/approval-receipt.mjs'
@@ -42,6 +44,8 @@ on:
       - 'avior-guard-mcp/oauth-authorization-compat.test.mjs'
       - 'avior-guard-mcp/index-gmail-staged.mjs'
       - 'avior-guard-mcp/index.mjs'
+      - 'avior-guard-mcp/selftest-preview-6217.mjs'
+      - 'avior-guard-mcp/selftest-preview-6217.test.mjs'
       - 'avior-guard-mcp/live-order-6217.mjs'
       - 'avior-guard-mcp/live-order-6217.test.mjs'
       - 'avior-guard-mcp/approval-receipt.mjs'
@@ -70,6 +74,8 @@ jobs:
         run: node --test avior-guard-mcp/guarded-supplier-request.test.mjs avior-guard-mcp/acceptance-6217.test.mjs
       - name: OAuth consent and refresh regression tests (no Google API)
         run: node --test avior-guard-mcp/oauth-refresh.test.mjs avior-guard-mcp/consent-readiness.test.mjs avior-guard-mcp/oauth-authorization-compat.test.mjs avior-guard-mcp/oauth-gmail-session-refresh.test.mjs
+      - name: Read-only 6217 full preflight and conditional card verification
+        run: node --test avior-guard-mcp/selftest-preview-6217.test.mjs
       - name: Live master-registry and full 6217 source verification (mock Sheets)
         run: node --test avior-guard-mcp/live-order-6217.test.mjs
       - name: Signed approval, deduplication and Neon SQL adapter tests (mock only)
@@ -79,7 +85,7 @@ jobs:
       - name: Package staged function (existing Gmail send remains disabled)
         run: |
           mkdir -p build/aviorguard
-          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,package.json} build/aviorguard/
+          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,selftest-preview-6217.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,package.json} build/aviorguard/
           cp -r avior-guard-mcp/node_modules build/aviorguard/
           cd build/aviorguard && zip -qr ../../aviorguard-testonly-bundle.zip .
       - uses: actions/upload-artifact@v4

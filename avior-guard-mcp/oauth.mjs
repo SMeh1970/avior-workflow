@@ -77,7 +77,7 @@ export function challengeResult(id,scope=SCOPE){
  'content-type':'application/json','www-authenticate':challenge,'cache-control':'no-store'}});
 }
 export function enrichTools(list){return list.map(t=>({...t,
- securitySchemes:['avior_guard_status','avior_gmail_status'].includes(t.name)?[{type:'noauth'}]:[{type:'oauth2',scopes:[t.name.startsWith('avior_gmail_')?GUARD_GMAIL_SCOPE:SCOPE]}]}));}
+ securitySchemes:['avior_guard_status','avior_gmail_status'].includes(t.name)?[{type:'noauth'}]:[{type:'oauth2',scopes:t.name.startsWith('avior_gmail_')?[SCOPE,GUARD_GMAIL_SCOPE]:[SCOPE]}]}));}
 const cookie=v=>'__Host-avior_session='+encodeURIComponent(v)+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600';
 function cookieRead(req){const a=(req.headers.get('cookie')||'').match(/(?:^|;\s*)__Host-avior_session=([^;]+)/);return a?decodeURIComponent(a[1]):null;}
 const signedNonce=()=>b64(randomBytes(24));

@@ -111,6 +111,18 @@ function checkOperation(cell, value) {
   return {allowed:true};
 }
 async function callTool(name, args, request) {
+  // Source-only preflight; no banking data, Gmail capability, or external writes.
+  if(name==='avior_live_order_6217_readonly'){
+    if(!process.env.GOOGLE_SERVICE_ACCOUNT_JSON)throw Error('GOOGLE_READER_UNAVAILABLE');
+    const order=await loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken}));
+    if(order.isVerified!==true||order.orderId!=='6217'||order.positions.length!==10)
+      throw Error('LIVE_ORDER_NOT_VERIFIED');
+    return {status:'VERIFIED_SOURCE_ONLY',orderId:order.orderId,
+      positions:order.positions.map(p=>({number:p.number,name:p.name,quantity:p.quantity,unit:p.unit})),
+      deliveryAddress:order.deliveryAddress,sourceFingerprint:order.sourceFingerprint,
+      emailsSent:0,databaseWrites:0,sheetWrites:0,
+      note:'No company card or Gmail consent assessed. Not authorization to send.'};
+  }
   if(name==='avior_selftest_preview_6217'){
     // Read-only preview, with zero Gmail and zero DB writes. Own mailbox only,
     // no client-controlled delivery address, order ID or recipient.
@@ -216,6 +228,7 @@ async function callTool(name, args, request) {
   throw Error('UNKNOWN_TOOL');
 }
 const tools = [
+  {name:'avior_live_order_6217_readonly',description:'READ ONLY. Retrieve all 10 verified positions and source SHA-256 for order 6217 from live master registry and order sheet. No company or bank credentials accepted. NEVER sends Gmail, drafts, or modifies Google Sheets/PostgreSQL.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_selftest_preview_6217',description:'READ ONLY. Verify full live order #6217 against the master registry and a pinned, provisional 07 Oct company card, preview to the authenticated mailbox owner ONLY. No Gmail sends, no drafts, no PostgreSQL claims, no sheet writes.',inputSchema:{type:'object',properties:{
     companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false}
   },required:['companyCard'],additionalProperties:false}},
@@ -256,6 +269,11 @@ export default {async fetch(req) {
       if(!checkAccess(req,scope))return challengeResult(id,scope===GUARD_GMAIL_SCOPE?'avior:read '+GUARD_GMAIL_SCOPE:scope);
     }
     if(!tools.some(t=>t.name===q.params?.name))return err(id,-32601,'Unknown tool');
+    // An MCP scope alone proves nothing about the short-lived Google Gmail
+    // capability: refresh deliberately strips that token. Force an interactive
+    // Google OAuth regrant instead of returning a misleading "consent denied".
+    if(q.params?.name==='avior_gmail_consent_proof'&&!authorizedGmailAccess(req))
+      return challengeResult(id,'avior:read '+GUARD_GMAIL_SCOPE);
     try{const result=await callTool(q.params?.name,q.params?.arguments||{},req);return response(id,{content:[{type:'text',text:JSON.stringify(result)}],isError:result.status==='FAILED_READBACK'});}catch(e){return response(id,{content:[{type:'text',text:JSON.stringify({status:'ERROR',reason:String(e.message||'INTERNAL_ERROR'),writes_verified:false})}],isError:true});}
   }
   return err(id,-32601,'Method not found');

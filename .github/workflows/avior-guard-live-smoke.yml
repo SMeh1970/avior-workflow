@@ -1,0 +1,37 @@
+name: AVIOR Guard live read-only deployment smoke
+on:
+  push:
+    branches: [avior-guard-mcp-pilot]
+    paths: ['.github/workflows/avior-guard-live-smoke.yml']
+jobs:
+  deployed-readonly-contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Inspect live Neon function without credentials or changes
+        env:
+          AVIOR_BASE: https://br-still-wind-b9pzhljq-aviorguard.compute.c-7.eu-central-1.aws.neon.tech/
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const base=process.env.AVIOR_BASE;
+          const home=await fetch(base);
+          assert.equal(home.status,200,'Neon function does not respond');
+          const status=await home.json();
+          assert.equal(status.gmail_enabled,false,'Unexpected production Gmail flag');
+          assert.equal(status.production_writes_enabled,false,'Unexpected production writes');
+          const tools=await fetch(base,{method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({jsonrpc:'2.0',id:7,method:'tools/list',params:{}})});
+          assert.equal(tools.status,200);
+          const json=await tools.json();
+          const names=(json.result?.tools||[]).map(x=>x.name);
+          for(const required of ['avior_guard_status','avior_selftest_prepare_6217','avior_gmail_selftest_dispatch_6217']){
+            assert.ok(names.includes(required),'Missing deployed MCP tool '+required);
+          }
+          const send=names.find(x=>x==='avior_gmail_selftest_dispatch_6217');
+          assert.ok(send,'No staged self-send tool');
+          const invalid=await fetch(base+'selftest/review',{redirect:'manual'});
+          assert.equal(invalid.status,403,'Unapproved human review link must fail closed');
+          console.log('PASS live Neon read-only smoke: deployed tools and no-send flags');
+          NODE

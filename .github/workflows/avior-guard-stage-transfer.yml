@@ -21,7 +21,7 @@ jobs:
         run: |
           npm install --prefix avior-guard-mcp --ignore-scripts --no-audit --no-fund
           mkdir -p /tmp/aviorguard-function
-          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,selftest-preview-6217.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,browser-selftest-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,selftest-dispatch-6217.mjs,human-approval.mjs,package.json} /tmp/aviorguard-function/
+          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,selftest-preview-6217.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,browser-selftest-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,selftest-dispatch-6217.mjs,human-approval.mjs,browser-preflight-6217.mjs,package.json} /tmp/aviorguard-function/
           cp -r avior-guard-mcp/node_modules /tmp/aviorguard-function/
           cd /tmp/aviorguard-function && zip -qr /tmp/aviorguard-staging.zip .
           unzip -l /tmp/aviorguard-staging.zip | grep -q '@neondatabase/serverless'

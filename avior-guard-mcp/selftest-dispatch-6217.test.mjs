@@ -98,11 +98,13 @@ test('different recipient invalidates existing signature and cannot send',async(
  await assert.rejects(dispatchSelfTest6217({...t,ownEmail:'other@example.org'}));
  assert.equal(t.transport.sends,0);
 });
-test('attachments cannot be injected through self-test interface',async()=>{
+test('unapproved attachment injection blocks before claim and Gmail',async()=>{
  const t=await approved();
- const p=await dispatchSelfTest6217({...t,attachments:[{filename:'wrong.pdf',bytes:Buffer.from('invalid')}]});
- assert.equal(p.status,'VERIFIED');
- assert.equal(t.transport.sends,1);
+ await assert.rejects(dispatchSelfTest6217({
+  ...t,attachments:[{filename:'wrong.pdf',bytes:Buffer.from('invalid')}]
+ }),{code:'SELF_TEST_ATTACHMENTS_NOT_ALLOWED'});
+ assert.equal(t.transport.sends,0);
+ assert.equal(t.store.map.size,0);
 });
 test('Gmail ambiguous failure never permits an automatic retry',async()=>{
  const t=await approved();

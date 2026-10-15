@@ -26,7 +26,7 @@ jobs:
           assert.equal(tools.status,200);
           const json=await tools.json();
           const names=(json.result?.tools||[]).map(x=>x.name);
-          for(const required of ['avior_guard_status','avior_live_order_6217_readonly','avior_selftest_prepare_6217','avior_gmail_selftest_dispatch_6217']){
+          for(const required of ['avior_guard_status','avior_live_order_6217_readonly','avior_selftest_prepare_from_gmail_6217','avior_selftest_prepare_6217','avior_gmail_selftest_dispatch_6217']){
             assert.ok(names.includes(required),'Missing deployed MCP tool '+required);
           }
           const send=names.find(x=>x==='avior_gmail_selftest_dispatch_6217');
@@ -35,6 +35,10 @@ jobs:
             body:JSON.stringify({jsonrpc:'2.0',id:8,method:'tools/call',
               params:{name:'avior_live_order_6217_readonly',arguments:{}}})});
           assert.equal(unauthorized.status,401,'Live-order data must never be anonymously exposed');
+          const noConsent=await fetch(base,{method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({jsonrpc:'2.0',id:9,method:'tools/call',
+              params:{name:'avior_selftest_prepare_from_gmail_6217',arguments:{}}})});
+          assert.equal(noConsent.status,401,'Gmail historical-card reading must require authenticated Google grant');
           const invalid=await fetch(base+'selftest/review',{redirect:'manual'});
           assert.equal(invalid.status,403,'Unapproved human review link must fail closed');
           console.log('PASS live Neon read-only smoke: deployed tools and no-send flags');

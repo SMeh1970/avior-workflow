@@ -65,11 +65,15 @@ function verifyState(token,secret,now=Date.now()){
     deny('HUMAN_OAUTH_STATE_EXPIRED');
  return data;
 }
+/** Only the browser handler may inspect the signed, encrypted ticket. */
+export function readHumanReviewTicket(ticket,env=process.env,now=Date.now()){
+ return open(ticket,env.MCP_AUTH_SIGNING_SECRET,now);
+}
 function page(text,body,status=200,extra={}) {
  return html('<h2>'+escapeHtml(text)+'</h2>'+body,status,extra);
 }
 /** Generate review URL only from a deterministic, server-verified full-order plan. */
-export function makeHumanReviewUrl({plan,userMessageId,ownEmail,env=process.env,now=Date.now()}){
+export function makeHumanReviewUrl({plan,userMessageId,ownEmail,autoSend=false,env=process.env,now=Date.now()}){
  if(plan?.message?.to?.length!==1||plan.message.to[0]!==ownEmail||
     plan.message.cc?.length||plan.message.bcc?.length||plan.message.attachments?.length||
     !/^[a-f0-9]{64}$/.test(plan.fingerprint||'')||typeof userMessageId!=='string')
@@ -77,7 +81,7 @@ export function makeHumanReviewUrl({plan,userMessageId,ownEmail,env=process.env,
  const payload={v:1,mode:'SELF_TEST',orderId:'6217',fingerprint:plan.fingerprint,
   userMessageId,recipient:ownEmail,to:plan.message.to,
   cc:[],bcc:[],attachments:[],subject:plan.message.subject,body:plan.message.body,
-  issuedAt:now,expiresAt:now+600000};
+  issuedAt:now,expiresAt:now+600000,autoSend:autoSend===true};
  return HOST+'/selftest/review?t='+encodeURIComponent(seal(payload,env.MCP_AUTH_SIGNING_SECRET));
 }
 /**
@@ -92,8 +96,8 @@ export async function routeHumanReview(req,{env=process.env,fetcher=fetch,now=Da
    const data=open(url.searchParams.get('t'),secret,now());
    const form='<pre style="white-space:pre-wrap">'+escapeHtml('Кому: '+data.recipient+'\nТема: '+data.subject+'\n\n'+data.body)+'</pre>'+
     '<p><strong>Тест только на собственную почту. Поставщикам не отправляется.</strong></p>'+
-    '<form method="post" action="/selftest/approve"><input type="hidden" name="ticket" value="'+escapeHtml(url.searchParams.get('t'))+'">'+
-    '<button type="submit">Подтвердить именно это тестовое письмо через Google</button></form>';
+    '<form method="post" action="'+(data.autoSend===true?'/selftest/confirm-send':'/selftest/approve')+'"><input type="hidden" name="ticket" value="'+escapeHtml(url.searchParams.get('t'))+'">'+
+    '<button type="submit">'+(data.autoSend===true?'Подтверждаю и отправляю ОДНО тестовое письмо только на собственный Gmail':'Подтвердить именно это тестовое письмо через Google')+'</button></form>';
    return page('Проверка письма ООО «АВИОР» №6217',form);
   }catch(e){return page('Подтверждение недоступно','<p>'+escapeHtml(e.code||'INVALID_TICKET')+'</p>',403);}
  }

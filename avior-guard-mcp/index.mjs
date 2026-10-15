@@ -172,6 +172,10 @@ async function callTool(name, args, request) {
     // Approval receipts are signed OUTSIDE the MCP surface after human review.
     if(process.env.ENABLE_AVIOR_SELFTEST_SEND!=='true')
       return {status:'BLOCKED',reason:'SELFTEST_SEND_DISABLED',emailsSent:0};
+    // The user approved ONE business instruction. An arbitrary new message ID
+    // must never create a second PostgreSQL operation key.
+    if(args?.userMessageId!=='OWNER_SINGLE_TEST_6217_20261015')
+      return {status:'BLOCKED',reason:'ONLY_THE_APPROVED_SINGLE_TEST_ID_ALLOWED',emailsSent:0};
     const grant=authorizedGmailAccess(request);
     if(!grant)return {status:'BLOCKED',reason:'GMAIL_OAUTH_CAPABILITY_REQUIRED',emailsSent:0};
     // Only the separate browser+Google identity flow can issue this receipt.

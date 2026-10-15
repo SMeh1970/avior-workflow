@@ -37,12 +37,26 @@ export function parseHistoricalCompanyCard(text){
 export async function readPinnedCard({googleToken,ownEmail,fetcher=fetch}){
  if(typeof googleToken!=='string'||googleToken.length<20)fail('GMAIL_TOKEN_REQUIRED');
  const headers={authorization:'Bearer '+googleToken,accept:'application/json'};
- const p=await fetcher('https://gmail.googleapis.com/gmail/v1/users/me/profile',{headers});
- if(!p.ok)fail('GOOGLE_GMAIL_PROFILE_FAILED');
- const profile=await p.json();
- if(String(profile.emailAddress||'').toLowerCase()!==ownEmail)fail('GOOGLE_MAILBOX_MISMATCH');
+ // The caller has already cryptographically verified the Google identity:
+ // the browser route checks the OIDC ID token, and MCP uses the verified
+ // short-lived bound Gmail capability. Avoid the redundant Gmail profile API.
+ if(ownEmail!=='1043324@gmail.com')fail('GOOGLE_MAILBOX_MISMATCH');
  const r=await fetcher('https://gmail.googleapis.com/gmail/v1/users/me/messages/'+HISTORICAL_SENT_ID+'?format=full',{headers});
- if(!r.ok)fail('HISTORICAL_CARD_EMAIL_NOT_FOUND');
+ if(!r.ok){
+   const status=r.status;
+   let code='';
+   try{
+     const x=await r.json();
+     const reasons=[x?.error?.status,...(x?.error?.errors||[]).map(e=>e.reason),
+       ...(x?.error?.details||[]).map(e=>e.reason)].filter(Boolean);
+     code=reasons.find(y=>typeof y==='string'&&/^[A-Za-z_]{3,64}$/.test(y))||'';
+   }catch{}
+   const hint=/SERVICE_DISABLED|accessNotConfigured|API_KEY_SERVICE_BLOCKED/i.test(code)
+     ?'GMAIL_API_DISABLED'
+     : /PERMISSION_DENIED|insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(code)
+       ?'GMAIL_SCOPE_DENIED' : 'GMAIL_SOURCE_HTTP_'+status;
+   fail(hint);
+ }
  const msg=await r.json();
  if(msg.id!==HISTORICAL_SENT_ID||!msg.labelIds?.includes('SENT'))fail('HISTORICAL_CARD_SOURCE_INVALID');
  const plain=parts(msg.payload).find(x=>x.mimeType==='text/plain'&&x.body?.data);

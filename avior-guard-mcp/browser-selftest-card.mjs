@@ -34,18 +34,18 @@ export function parseHistoricalCompanyCard(text){
  return card;
 }
 /** The fixed, pinned message is used ONLY as historical self-test data. */
-export async function readPinnedCard({googleToken,ownEmail,fetcher=fetch}){
+export async function readPinnedCard({googleToken,ownEmail,verifiedEmail,fetcher=fetch}){
  if(typeof googleToken!=='string'||googleToken.length<20)fail('GMAIL_TOKEN_REQUIRED');
+ // The caller must supply the already verified Google OIDC identity.
+ // This is checked by the Google browser callback or short-lived MCP capability,
+ // not accepted as an untrusted tool argument.
+ const owner=String(ownEmail||'').trim().toLowerCase();
+ if(!owner||owner!==String(verifiedEmail||'').trim().toLowerCase())
+   fail('GOOGLE_MAILBOX_MISMATCH');
  const headers={authorization:'Bearer '+googleToken,accept:'application/json'};
- const p=await fetcher('https://gmail.googleapis.com/gmail/v1/users/me/profile',{headers});
- if(!p.ok){
-   // Public HTTP status only: never return credentials or Google response payloads.
-   fail('GOOGLE_GMAIL_PROFILE_HTTP_'+p.status);
- }
- const profile=await p.json();
- if(String(profile.emailAddress||'').toLowerCase()!==ownEmail)fail('GOOGLE_MAILBOX_MISMATCH');
+ // No second /users/me/profile request: the Google ID token was verified upstream.
  const r=await fetcher('https://gmail.googleapis.com/gmail/v1/users/me/messages/'+HISTORICAL_SENT_ID+'?format=full',{headers});
- if(!r.ok)fail('HISTORICAL_CARD_EMAIL_NOT_FOUND');
+ if(!r.ok)fail('HISTORICAL_CARD_HTTP_'+r.status);
  const msg=await r.json();
  if(msg.id!==HISTORICAL_SENT_ID||!msg.labelIds?.includes('SENT'))fail('HISTORICAL_CARD_SOURCE_INVALID');
  const plain=parts(msg.payload).find(x=>x.mimeType==='text/plain'&&x.body?.data);

@@ -32,6 +32,7 @@ on:
       - 'avior-guard-mcp/neon-dispatch-client.mjs'
       - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
+      - 'avior-guard-mcp/browser-selftest-card.mjs'
       - 'avior-guard-mcp/gmail-transport.mjs'
       - 'avior-guard-mcp/gmail-transport.test.mjs'
       - 'avior-guard-mcp/package.json'
@@ -66,6 +67,7 @@ on:
       - 'avior-guard-mcp/neon-dispatch-client.mjs'
       - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
+      - 'avior-guard-mcp/browser-selftest-card.mjs'
       - 'avior-guard-mcp/gmail-transport.mjs'
       - 'avior-guard-mcp/gmail-transport.test.mjs'
       - 'avior-guard-mcp/package.json'
@@ -99,7 +101,7 @@ jobs:
       - name: Package staged function (existing Gmail send remains disabled)
         run: |
           mkdir -p build/aviorguard
-          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,selftest-preview-6217.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,selftest-dispatch-6217.mjs,human-approval.mjs,package.json} build/aviorguard/
+          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,selftest-preview-6217.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,browser-selftest-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,selftest-dispatch-6217.mjs,human-approval.mjs,package.json} build/aviorguard/
           cp -r avior-guard-mcp/node_modules build/aviorguard/
           cd build/aviorguard && zip -qr ../../aviorguard-testonly-bundle.zip .
       - uses: actions/upload-artifact@v4

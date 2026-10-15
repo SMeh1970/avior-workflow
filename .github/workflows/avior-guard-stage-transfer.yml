@@ -4,6 +4,7 @@ on:
   push:
     branches: [avior-guard-mcp-pilot]
     paths: ['.github/workflows/avior-guard-stage-transfer.yml']
+  workflow_dispatch:
 jobs:
   build-handoff:
     runs-on: ubuntu-latest

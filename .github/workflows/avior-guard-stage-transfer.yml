@@ -1,4 +1,5 @@
 name: AVIOR Guard staging bundle handoff
+# Repackage after attachment-blocking fix and independent Gmail transport tests.
 on:
   push:
     branches: [avior-guard-mcp-pilot]

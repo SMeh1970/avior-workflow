@@ -7,6 +7,7 @@ import {prepareSelfTest6217,dispatchSelfTest6217} from './selftest-dispatch-6217
 import {createNeonDispatchStore} from './neon-dispatch-client.mjs';
 import {authorizedGmailTransport} from './gmail-transport.mjs';
 import {readPinnedCard} from './browser-selftest-card.mjs';
+import {routeBrowserPreflight6217} from './browser-preflight-6217.mjs';
 import {routeHumanReview,makeHumanReviewUrl,approvalSecretFromEnv} from './human-approval.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
@@ -271,6 +272,12 @@ const tools = [
 function response(id,result){return output({jsonrpc:'2.0',id,result});}
 function err(id,code,message){return output({jsonrpc:'2.0',id,error:{code,message}});}
 export default {async fetch(req) {
+  // User opens this link directly; Gmail READONLY OAuth creates a read-only
+  // exact-letter review. No email is sent from the preflight callback.
+  const preflightRoute=await routeBrowserPreflight6217(req,{
+    loadOrder:()=>loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken}))
+  });
+  if(preflightRoute)return preflightRoute;
   const humanRoute=await routeHumanReview(req);if(humanRoute)return humanRoute;
   const authRoute=await routeOAuth(req);if(authRoute)return authRoute;
   const url=new URL(req.url);

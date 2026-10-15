@@ -6,6 +6,7 @@ import {preview6217SelfTest,HISTORICAL_CARD_FIELDS} from './selftest-preview-621
 import {prepareSelfTest6217,dispatchSelfTest6217} from './selftest-dispatch-6217.mjs';
 import {createNeonDispatchStore} from './neon-dispatch-client.mjs';
 import {authorizedGmailTransport} from './gmail-transport.mjs';
+import {readPinnedCard} from './browser-selftest-card.mjs';
 import {routeHumanReview,makeHumanReviewUrl,approvalSecretFromEnv} from './human-approval.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
@@ -133,6 +134,22 @@ async function callTool(name, args, request) {
       ownEmail:process.env.MCP_ALLOWED_GOOGLE_EMAIL
     });
   }
+  if(name==='avior_selftest_prepare_from_gmail_6217'){
+    const grant=authorizedGmailAccess(request);
+    if(!grant)return {status:'BLOCKED',reason:'FRESH_GOOGLE_GMAIL_GRANT_REQUIRED'};
+    const ownEmail=process.env.MCP_ALLOWED_GOOGLE_EMAIL;
+    const card=await readPinnedCard({googleToken:grant.access_token,ownEmail});
+    const prepared=await prepareSelfTest6217({
+      loadOrder:()=>loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken})),
+      provisionalCard:card,ownEmail,userMessageId:'OWNER_SINGLE_TEST_6217_20261015'
+    });
+    return {status:'PREVIEW_ONLY',sendEnabled:false,
+      fingerprint:prepared.plan.fingerprint,sourceFingerprint:prepared.order.sourceFingerprint,
+      recipient:ownEmail,orderId:'6217',message:prepared.plan.message,
+      approvalUrl:makeHumanReviewUrl({plan:prepared.plan,
+        userMessageId:'OWNER_SINGLE_TEST_6217_20261015',ownEmail}),
+      companyCardStatus:'HISTORICAL_CONDITIONAL_TEST_ONLY',emailsSent:0};
+  }
   if(name==='avior_selftest_prepare_6217'){
     // Full preview visible to authorized account; does NOT mint approval or send mail.
     if(!process.env.GOOGLE_SERVICE_ACCOUNT_JSON)throw Error('GOOGLE_READER_UNAVAILABLE');
@@ -232,6 +249,7 @@ const tools = [
   {name:'avior_selftest_preview_6217',description:'READ ONLY. Verify full live order #6217 against the master registry and a pinned, provisional 07 Oct company card, preview to the authenticated mailbox owner ONLY. No Gmail sends, no drafts, no PostgreSQL claims, no sheet writes.',inputSchema:{type:'object',properties:{
     companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false}
   },required:['companyCard'],additionalProperties:false}},
+  {name:'avior_selftest_prepare_from_gmail_6217',description:'READ ONLY. Build exact order 6217 self-test preview by rereading fixed historical SENT Gmail message and validating company-card hash. Inputs empty. No email sends or write operations. Needs fresh Google Gmail read grant.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_selftest_prepare_6217',description:'READ ONLY. Show the exact full ten-position self-test letter and SHA-256 fingerprint. Requires the pinned 07 Oct historical company card. No sending, no approval issuance.',inputSchema:{type:'object',properties:{
     companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false},
     userMessageId:{type:'string',minLength:8,maxLength:128}
@@ -265,14 +283,14 @@ export default {async fetch(req) {
   if(q.method==='tools/list')return response(id,{tools:enrichTools(tools)});
   if(q.method==='tools/call'){
     if(!['avior_guard_status','avior_gmail_status'].includes(q.params?.name)){
-      const scope=['avior_gmail_consent_proof','avior_gmail_selftest_dispatch_6217'].includes(q.params?.name)?GUARD_GMAIL_SCOPE:'avior:read';
+      const scope=['avior_gmail_consent_proof','avior_gmail_selftest_dispatch_6217','avior_selftest_prepare_from_gmail_6217'].includes(q.params?.name)?GUARD_GMAIL_SCOPE:'avior:read';
       if(!checkAccess(req,scope))return challengeResult(id,scope===GUARD_GMAIL_SCOPE?'avior:read '+GUARD_GMAIL_SCOPE:scope);
     }
     if(!tools.some(t=>t.name===q.params?.name))return err(id,-32601,'Unknown tool');
     // An MCP scope alone proves nothing about the short-lived Google Gmail
     // capability: refresh deliberately strips that token. Force an interactive
     // Google OAuth regrant instead of returning a misleading "consent denied".
-    if(q.params?.name==='avior_gmail_consent_proof'&&!authorizedGmailAccess(req))
+    if(['avior_gmail_consent_proof','avior_selftest_prepare_from_gmail_6217'].includes(q.params?.name)&&!authorizedGmailAccess(req))
       return challengeResult(id,'avior:read '+GUARD_GMAIL_SCOPE);
     try{const result=await callTool(q.params?.name,q.params?.arguments||{},req);return response(id,{content:[{type:'text',text:JSON.stringify(result)}],isError:result.status==='FAILED_READBACK'});}catch(e){return response(id,{content:[{type:'text',text:JSON.stringify({status:'ERROR',reason:String(e.message||'INTERNAL_ERROR'),writes_verified:false})}],isError:true});}
   }

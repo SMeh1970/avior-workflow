@@ -1,5 +1,5 @@
 name: AVIOR Guard staging bundle handoff
-# Repackage guarded source-read + self-test dispatch after passing mocked regression tests.
+# Repackage final one-operation-key safety guard after read-only regression tests.
 on:
   push:
     branches: [avior-guard-mcp-pilot]

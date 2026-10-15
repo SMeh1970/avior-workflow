@@ -3,6 +3,9 @@ import {routeOAuth,checkAccess,challengeResult,enrichTools,authorizedGmailAccess
 import {GUARD_GMAIL_SCOPE} from './gmail-capability.mjs';
 import {loadVerifiedOrder6217,makeGoogleSheetsReader} from './live-order-6217.mjs';
 import {preview6217SelfTest,HISTORICAL_CARD_FIELDS} from './selftest-preview-6217.mjs';
+import {prepareSelfTest6217,dispatchSelfTest6217} from './selftest-dispatch-6217.mjs';
+import {createNeonDispatchStore} from './neon-dispatch-client.mjs';
+import {authorizedGmailTransport} from './gmail-transport.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
  * The service account can access ONLY a user-shared test copy.
@@ -117,6 +120,45 @@ async function callTool(name, args, request) {
       ownEmail:process.env.MCP_ALLOWED_GOOGLE_EMAIL
     });
   }
+  if(name==='avior_selftest_prepare_6217'){
+    // Full preview visible to authorized account; does NOT mint approval or send mail.
+    if(!process.env.GOOGLE_SERVICE_ACCOUNT_JSON)throw Error('GOOGLE_READER_UNAVAILABLE');
+    const ownEmail=process.env.MCP_ALLOWED_GOOGLE_EMAIL;
+    const loadOrder=()=>loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken}));
+    const prepared=await prepareSelfTest6217({
+      loadOrder,provisionalCard:args?.companyCard,ownEmail,
+      userMessageId:args?.userMessageId
+    });
+    return {status:'PREVIEW_ONLY',sendEnabled:false,recipient:ownEmail,
+      userMessageId:args.userMessageId,orderId:'6217',
+      sourceFingerprint:prepared.order.sourceFingerprint,
+      fingerprint:prepared.plan.fingerprint,message:prepared.plan.message,
+      companyCardStatus:'HISTORICAL_CONDITIONAL_TEST_ONLY',
+      warning:'No approval receipt is issued. No mail is sent.'};
+  }
+  if(name==='avior_gmail_selftest_dispatch_6217'){
+    // Disabled in live deployment unless operator separately enables it.
+    // Approval receipts are signed OUTSIDE the MCP surface after human review.
+    if(process.env.ENABLE_AVIOR_SELFTEST_SEND!=='true')
+      return {status:'BLOCKED',reason:'SELFTEST_SEND_DISABLED',emailsSent:0};
+    const grant=authorizedGmailAccess(request);
+    if(!grant)return {status:'BLOCKED',reason:'GMAIL_OAUTH_CAPABILITY_REQUIRED',emailsSent:0};
+    const approvalSecret=process.env.AVIOR_DISPATCH_APPROVAL_SECRET;
+    if(typeof approvalSecret!=='string'||approvalSecret.length<32)
+      return {status:'BLOCKED',reason:'EXTERNAL_APPROVAL_ISSUER_NOT_CONFIGURED',emailsSent:0};
+    const ownEmail=process.env.MCP_ALLOWED_GOOGLE_EMAIL;
+    const loadOrder=()=>loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken}));
+    const store=await createNeonDispatchStore();
+    const transport=authorizedGmailTransport({
+      googleToken:grant.access_token,verifiedAccount:grant.email,
+      allowedRecipient:ownEmail,enabled:true
+    });
+    return dispatchSelfTest6217({
+      loadOrder,provisionalCard:args?.companyCard,ownEmail,
+      userMessageId:args?.userMessageId,approvalReceipt:args?.approvalReceipt,
+      store,transport,approvalSecret,enabled:true
+    });
+  }
   if(name==='avior_gmail_consent_proof'){
     const grant=authorizedGmailAccess(request);
     return grant?{status:'GOOGLE_CONSENT_CONFIRMED',account_verified:true,token_expires_at:grant.expiresAt,gmail_send_enabled:false,emails_sent:0}:{status:'BLOCKED',reason:'GOOGLE_GMAIL_CONSENT_NOT_VERIFIED',gmail_send_enabled:false};
@@ -176,6 +218,15 @@ const tools = [
   {name:'avior_selftest_preview_6217',description:'READ ONLY. Verify full live order #6217 against the master registry and a pinned, provisional 07 Oct company card, preview to the authenticated mailbox owner ONLY. No Gmail sends, no drafts, no PostgreSQL claims, no sheet writes.',inputSchema:{type:'object',properties:{
     companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false}
   },required:['companyCard'],additionalProperties:false}},
+  {name:'avior_selftest_prepare_6217',description:'READ ONLY. Show the exact full ten-position self-test letter and SHA-256 fingerprint. Requires the pinned 07 Oct historical company card. No sending, no approval issuance.',inputSchema:{type:'object',properties:{
+    companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false},
+    userMessageId:{type:'string',minLength:8,maxLength:128}
+  },required:['companyCard','userMessageId'],additionalProperties:false}},
+  {name:'avior_gmail_selftest_dispatch_6217',description:'GATED: one-time self-address-only dispatch with fresh live Sheets read, exact pinned historical company-card hash, external signed approval receipt, atomic PostgreSQL claim and Gmail Sent readback. Disabled by default; NEVER send to supplier.',inputSchema:{type:'object',properties:{
+    companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false},
+    userMessageId:{type:'string',minLength:8,maxLength:128},
+    approvalReceipt:{type:'string',minLength:1,maxLength:2500}
+  },required:['companyCard','userMessageId','approvalReceipt'],additionalProperties:false}},
   {name:'avior_gmail_status',description:'Read-only Gmail consent integration status; NEVER sends mail.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_gmail_consent_proof',description:'Request Google Gmail consent for AVIOR Guard and report whether it was authorized. Does not send, draft, edit, or read user emails.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_guard_status',description:'Diagnostic status for AVIOR Guard; no private data returned.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
@@ -193,13 +244,13 @@ export default {async fetch(req) {
   let q; try{q=await req.json();}catch{return output({error:'Bad JSON'},400);}
   if(q?.jsonrpc!=='2.0'||typeof q.method!=='string')return err(q?.id??null,-32600,'Invalid request');
   const id=q.id??null;
-  if(q.method==='initialize')return response(id,{protocolVersion:proto,capabilities:{tools:{}},serverInfo:{name:'AVIOR Guard Pilot',version:'0.4.2-gmail-consent-only-no-send'}});
+  if(q.method==='initialize')return response(id,{protocolVersion:proto,capabilities:{tools:{}},serverInfo:{name:'AVIOR Guard Pilot',version:'0.4.3-staged-selftest-dispatch-disabled'}});
   if(q.method==='notifications/initialized')return new Response(null,{status:202});
   if(q.method==='ping')return response(id,{});
   if(q.method==='tools/list')return response(id,{tools:enrichTools(tools)});
   if(q.method==='tools/call'){
     if(!['avior_guard_status','avior_gmail_status'].includes(q.params?.name)){
-      const scope=q.params?.name==='avior_gmail_consent_proof'?GUARD_GMAIL_SCOPE:'avior:read';
+      const scope=['avior_gmail_consent_proof','avior_gmail_selftest_dispatch_6217'].includes(q.params?.name)?GUARD_GMAIL_SCOPE:'avior:read';
       if(!checkAccess(req,scope))return challengeResult(id,scope===GUARD_GMAIL_SCOPE?'avior:read '+GUARD_GMAIL_SCOPE:scope);
     }
     if(!tools.some(t=>t.name===q.params?.name))return err(id,-32601,'Unknown tool');

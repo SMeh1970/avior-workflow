@@ -38,6 +38,7 @@ jobs:
           const dispatch= json.result.tools.find(x=>x.name==='avior_gmail_selftest_dispatch_6217');
           assert.ok(dispatch?.inputSchema?.required?.includes('approvalReceipt'),'Missing user approval input');
           assert.ok(!dispatch?.inputSchema?.properties?.companyCard,'Banking card must not arrive through ChatGPT');
+          assert.ok(dispatch?.inputSchema?.required?.includes('userMessageId'),'Fixed business instruction must be required');
           const noConsent=await fetch(base,{method:'POST',headers:{'content-type':'application/json'},
             body:JSON.stringify({jsonrpc:'2.0',id:9,method:'tools/call',
               params:{name:'avior_selftest_prepare_from_gmail_6217',arguments:{}}})});

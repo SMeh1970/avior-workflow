@@ -31,6 +31,7 @@ on:
       - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
       - 'avior-guard-mcp/gmail-transport.mjs'
+      - 'avior-guard-mcp/gmail-transport.test.mjs'
       - 'avior-guard-mcp/package.json'
       - '.github/workflows/avior-guard-supplier.yml'
   pull_request:
@@ -62,6 +63,7 @@ on:
       - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
       - 'avior-guard-mcp/gmail-transport.mjs'
+      - 'avior-guard-mcp/gmail-transport.test.mjs'
       - 'avior-guard-mcp/package.json'
       - '.github/workflows/avior-guard-supplier.yml'
 jobs:
@@ -84,6 +86,8 @@ jobs:
         run: node --test avior-guard-mcp/live-order-6217.test.mjs
       - name: Signed approval, deduplication and Neon SQL adapter tests (mock only)
         run: node --test avior-guard-mcp/dispatch-once.test.mjs avior-guard-mcp/conditional-company-card.test.mjs avior-guard-mcp/neon-dispatch-client.test.mjs avior-guard-mcp/selftest-dispatch-6217.test.mjs
+      - name: Gmail MIME and Sent readback tests (mock only)
+        run: node --test avior-guard-mcp/gmail-transport.test.mjs
       - name: Install Neon driver for staging bundle
         run: npm install --prefix avior-guard-mcp --ignore-scripts --no-audit --no-fund
       - name: Package staged function (existing Gmail send remains disabled)

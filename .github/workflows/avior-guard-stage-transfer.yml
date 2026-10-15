@@ -1,0 +1,34 @@
+name: AVIOR Guard staging bundle handoff
+on:
+  push:
+    branches: [avior-guard-mcp-pilot]
+    paths: ['.github/workflows/avior-guard-stage-transfer.yml']
+jobs:
+  build-handoff:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm tests before packaging
+        run: node --test avior-guard-mcp/*.test.mjs
+      - name: Install pinned dependency and package function
+        run: |
+          npm install --prefix avior-guard-mcp --ignore-scripts --no-audit --no-fund
+          mkdir -p /tmp/aviorguard-function
+          cp avior-guard-mcp/{index.mjs,oauth.mjs,gmail-capability.mjs,guarded-supplier-request.mjs,guarded-supplier-strict.mjs,selftest-preview-6217.mjs,approval-receipt.mjs,dispatch-once.mjs,conditional-company-card.mjs,postgres-dispatch-store.mjs,neon-dispatch-client.mjs,live-order-6217.mjs,gmail-transport.mjs,selftest-dispatch-6217.mjs,package.json} /tmp/aviorguard-function/
+          cp -r avior-guard-mcp/node_modules /tmp/aviorguard-function/
+          cd /tmp/aviorguard-function && zip -qr /tmp/aviorguard-staging.zip .
+          unzip -l /tmp/aviorguard-staging.zip | grep -q '@neondatabase/serverless'
+          mkdir -p "$GITHUB_WORKSPACE/.staging"
+          base64 -w0 /tmp/aviorguard-staging.zip > "$GITHUB_WORKSPACE/.staging/aviorguard-testonly-20261015.zip.b64"
+      - name: Publish temporary transfer data for controlled Neon deployment
+        run: |
+          git config user.name "avior-guard-stage-bot"
+          git config user.email "avior-guard-stage@users.noreply.github.com"
+          git add .staging/aviorguard-testonly-20261015.zip.b64
+          git commit -m "ci: staged driver-included Neon package for temporary handoff [skip ci]"
+          git push origin HEAD:avior-guard-mcp-pilot

@@ -184,7 +184,7 @@ async function callTool(name, args, request) {
       allowedRecipient:ownEmail,enabled:true
     });
     return dispatchSelfTest6217({
-      loadOrder,provisionalCard:args?.companyCard,ownEmail,
+      loadOrder,provisionalCard:await readPinnedCard({googleToken:grant.access_token,ownEmail}),ownEmail,
       userMessageId:args?.userMessageId,approvalReceipt:args?.approvalReceipt,
       store,transport,approvalSecret,enabled:true
     });
@@ -254,11 +254,10 @@ const tools = [
     companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false},
     userMessageId:{type:'string',minLength:8,maxLength:128}
   },required:['companyCard','userMessageId'],additionalProperties:false}},
-  {name:'avior_gmail_selftest_dispatch_6217',description:'GATED: one-time self-address-only dispatch with fresh live Sheets read, exact pinned historical company-card hash, external signed approval receipt, atomic PostgreSQL claim and Gmail Sent readback. Disabled by default; NEVER send to supplier.',inputSchema:{type:'object',properties:{
-    companyCard:{type:'object',properties:Object.fromEntries(HISTORICAL_CARD_FIELDS.map(k=>[k,{type:'string',minLength:1}])),required:[...HISTORICAL_CARD_FIELDS],additionalProperties:false},
+  {name:'avior_gmail_selftest_dispatch_6217',description:'GATED: one-time self-address-only dispatch with fresh live Sheets read, internally fetched pinned Gmail historical card, external signed approval receipt, atomic PostgreSQL claim and Gmail Sent readback. Disabled by default; NEVER send to supplier.',inputSchema:{type:'object',properties:{
     userMessageId:{type:'string',minLength:8,maxLength:128},
     approvalReceipt:{type:'string',minLength:1,maxLength:2500}
-  },required:['companyCard','userMessageId','approvalReceipt'],additionalProperties:false}},
+  },required:['userMessageId','approvalReceipt'],additionalProperties:false}},
   {name:'avior_gmail_status',description:'Read-only Gmail consent integration status; NEVER sends mail.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_gmail_consent_proof',description:'Request Google Gmail consent for AVIOR Guard and report whether it was authorized. Does not send, draft, edit, or read user emails.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'avior_guard_status',description:'Diagnostic status for AVIOR Guard; no private data returned.',inputSchema:{type:'object',properties:{},additionalProperties:false}},

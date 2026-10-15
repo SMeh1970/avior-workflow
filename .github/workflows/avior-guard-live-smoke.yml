@@ -43,6 +43,13 @@ jobs:
             body:JSON.stringify({jsonrpc:'2.0',id:9,method:'tools/call',
               params:{name:'avior_selftest_prepare_from_gmail_6217',arguments:{}}})});
           assert.equal(noConsent.status,401,'Gmail historical-card reading must require authenticated Google grant');
+          const preflight=await fetch(base+'selftest/start',{redirect:'manual'});
+          assert.equal(preflight.status,302,'Browser preflight must redirect to Google');
+          const google=new URL(preflight.headers.get('location'));
+          assert.equal(google.hostname,'accounts.google.com');
+          assert.ok(google.searchParams.get('scope').includes('gmail.readonly'),'Google preflight must request Gmail read scope');
+          assert.ok(!google.searchParams.get('scope').includes('gmail.send'),'Google preflight must NOT request send scope');
+          assert.ok(preflight.headers.get('set-cookie')?.includes('HttpOnly'),'Browser CSRF cookie missing');
           const invalid=await fetch(base+'selftest/review',{redirect:'manual'});
           assert.equal(invalid.status,403,'Unapproved human review link must fail closed');
           console.log('PASS live Neon read-only smoke: deployed tools and no-send flags');

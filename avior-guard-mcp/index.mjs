@@ -6,6 +6,7 @@ import {preview6217SelfTest,HISTORICAL_CARD_FIELDS} from './selftest-preview-621
 import {prepareSelfTest6217,dispatchSelfTest6217} from './selftest-dispatch-6217.mjs';
 import {createNeonDispatchStore} from './neon-dispatch-client.mjs';
 import {authorizedGmailTransport} from './gmail-transport.mjs';
+import {routeHumanReview,makeHumanReviewUrl,approvalSecretFromEnv} from './human-approval.mjs';
 
 /* AVIOR Guard: deliberately narrow, fail-closed Google Sheets pilot.
  * The service account can access ONLY a user-shared test copy.
@@ -133,6 +134,7 @@ async function callTool(name, args, request) {
       userMessageId:args.userMessageId,orderId:'6217',
       sourceFingerprint:prepared.order.sourceFingerprint,
       fingerprint:prepared.plan.fingerprint,message:prepared.plan.message,
+      approvalUrl:makeHumanReviewUrl({plan:prepared.plan,userMessageId:args.userMessageId,ownEmail}),
       companyCardStatus:'HISTORICAL_CONDITIONAL_TEST_ONLY',
       warning:'No approval receipt is issued. No mail is sent.'};
   }
@@ -143,9 +145,8 @@ async function callTool(name, args, request) {
       return {status:'BLOCKED',reason:'SELFTEST_SEND_DISABLED',emailsSent:0};
     const grant=authorizedGmailAccess(request);
     if(!grant)return {status:'BLOCKED',reason:'GMAIL_OAUTH_CAPABILITY_REQUIRED',emailsSent:0};
-    const approvalSecret=process.env.AVIOR_DISPATCH_APPROVAL_SECRET;
-    if(typeof approvalSecret!=='string'||approvalSecret.length<32)
-      return {status:'BLOCKED',reason:'EXTERNAL_APPROVAL_ISSUER_NOT_CONFIGURED',emailsSent:0};
+    // Only the separate browser+Google identity flow can issue this receipt.
+    const approvalSecret=approvalSecretFromEnv();
     const ownEmail=process.env.MCP_ALLOWED_GOOGLE_EMAIL;
     const loadOrder=()=>loadVerifiedOrder6217(makeGoogleSheetsReader({getToken:googleToken}));
     const store=await createNeonDispatchStore();
@@ -236,6 +237,7 @@ const tools = [
 function response(id,result){return output({jsonrpc:'2.0',id,result});}
 function err(id,code,message){return output({jsonrpc:'2.0',id,error:{code,message}});}
 export default {async fetch(req) {
+  const humanRoute=await routeHumanReview(req);if(humanRoute)return humanRoute;
   const authRoute=await routeOAuth(req);if(authRoute)return authRoute;
   const url=new URL(req.url);
   if(req.method==='GET') return output({service:'AVIOR Guard',mode:'scoped-pilot',google_connected:Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),production_writes_enabled:false,gmail_enabled:false,gmail_consent_staged:true});
@@ -244,7 +246,7 @@ export default {async fetch(req) {
   let q; try{q=await req.json();}catch{return output({error:'Bad JSON'},400);}
   if(q?.jsonrpc!=='2.0'||typeof q.method!=='string')return err(q?.id??null,-32600,'Invalid request');
   const id=q.id??null;
-  if(q.method==='initialize')return response(id,{protocolVersion:proto,capabilities:{tools:{}},serverInfo:{name:'AVIOR Guard Pilot',version:'0.4.3-staged-selftest-dispatch-disabled'}});
+  if(q.method==='initialize')return response(id,{protocolVersion:proto,capabilities:{tools:{}},serverInfo:{name:'AVIOR Guard Pilot',version:'0.4.4-human-review-staged-selftest-disabled'}});
   if(q.method==='notifications/initialized')return new Response(null,{status:202});
   if(q.method==='ping')return response(id,{});
   if(q.method==='tools/list')return response(id,{tools:enrichTools(tools)});

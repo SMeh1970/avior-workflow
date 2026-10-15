@@ -56,10 +56,11 @@ export async function prepareSelfTest6217({
  */
 export async function dispatchSelfTest6217({
   loadOrder,provisionalCard,ownEmail,userMessageId,approvalReceipt,
-  store,transport,approvalSecret,enabled=false,
+  store,transport,approvalSecret,enabled=false,attachments=[],
   expectedCardHash=HISTORICAL_CARD_20261007_SHA256
 }) {
   if(enabled!==true) fail('GMAIL_DISPATCH_DISABLED');
+  if(!Array.isArray(attachments)||attachments.length) fail('SELF_TEST_ATTACHMENTS_NOT_ALLOWED');
   const prepared=await prepareSelfTest6217({
     loadOrder,provisionalCard,ownEmail,userMessageId,expectedCardHash
   });

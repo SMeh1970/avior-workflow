@@ -1,5 +1,5 @@
 name: AVIOR Guard staging bundle handoff
-# Repackage after Google-browser human approval integration.
+# Repackage guarded source-read + self-test dispatch after passing mocked regression tests.
 on:
   push:
     branches: [avior-guard-mcp-pilot]

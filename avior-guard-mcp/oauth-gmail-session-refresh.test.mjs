@@ -8,6 +8,7 @@ process.env.GOOGLE_OAUTH_CLIENT_SECRET='fake-google-secret-for-tests';
 process.env.MCP_ALLOWED_GOOGLE_EMAIL='owner@example.com';
 process.env.MCP_AUTH_SIGNING_SECRET='test-only-mcp-signing-secret-for-refresh-2026';
 const {routeOAuth,authorizedGmailAccess,checkAccess}=await import('./oauth.mjs');
+const entry=(await import('./index.mjs')).default;
 const host='https://br-still-wind-b9pzhljq-aviorguard.compute.c-7.eu-central-1.aws.neon.tech';
 const redirect='https://chatgpt.com/connector_platform_oauth_redirect';
 const resource=host+'/';
@@ -129,4 +130,20 @@ test('refresh cannot add an unconsented scope after read-only Google login',asyn
  })();
  const upgrade=await renew(client,token.refresh_token,{scope:'avior:gmail-send'});
  assert.equal(upgrade.status,400);
+});
+test('stale Gmail MCP scope without a fresh Google Gmail grant forces a new consent challenge',async()=>{
+ const {client,token}=await consent('avior:read avior:gmail-send');
+ const refreshed=await (await renew(client,token.refresh_token)).json();
+ assert.equal(checkAccess(bearer(refreshed.access_token),'avior:gmail-send'),true);
+ assert.equal(authorizedGmailAccess(bearer(refreshed.access_token)),null);
+ const challenge=await entry.fetch(makeReq('/',{
+  method:'POST',
+  headers:{'content-type':'application/json',authorization:'Bearer '+refreshed.access_token},
+  body:JSON.stringify({jsonrpc:'2.0',id:'fresh-gmail',method:'tools/call',
+    params:{name:'avior_gmail_consent_proof',arguments:{}}})
+ }));
+ assert.equal(challenge.status,401);
+ assert.match(challenge.headers.get('www-authenticate'),/avior:gmail-send/);
+ const body=await challenge.json();
+ assert.equal(body.result.isError,true);
 });

@@ -33,6 +33,7 @@ on:
       - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
       - 'avior-guard-mcp/browser-selftest-card.mjs'
+      - 'avior-guard-mcp/browser-selftest-card.test.mjs'
       - 'avior-guard-mcp/gmail-transport.mjs'
       - 'avior-guard-mcp/gmail-transport.test.mjs'
       - 'avior-guard-mcp/package.json'
@@ -68,6 +69,7 @@ on:
       - 'avior-guard-mcp/neon-dispatch-client.test.mjs'
       - 'avior-guard-mcp/gmail-capability.mjs'
       - 'avior-guard-mcp/browser-selftest-card.mjs'
+      - 'avior-guard-mcp/browser-selftest-card.test.mjs'
       - 'avior-guard-mcp/gmail-transport.mjs'
       - 'avior-guard-mcp/gmail-transport.test.mjs'
       - 'avior-guard-mcp/package.json'
@@ -87,7 +89,7 @@ jobs:
       - name: OAuth consent and refresh regression tests (no Google API)
         run: node --test avior-guard-mcp/oauth-refresh.test.mjs avior-guard-mcp/consent-readiness.test.mjs avior-guard-mcp/oauth-authorization-compat.test.mjs avior-guard-mcp/oauth-gmail-session-refresh.test.mjs
       - name: Read-only 6217 full preflight and conditional card verification
-        run: node --test avior-guard-mcp/selftest-preview-6217.test.mjs
+        run: node --test avior-guard-mcp/selftest-preview-6217.test.mjs avior-guard-mcp/browser-selftest-card.test.mjs
       - name: Live master-registry and full 6217 source verification (mock Sheets)
         run: node --test avior-guard-mcp/live-order-6217.test.mjs
       - name: Signed approval, deduplication and Neon SQL adapter tests (mock only)
